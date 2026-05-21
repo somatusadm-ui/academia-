@@ -94,7 +94,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--b2)}
 .modal{background:#fff;border-radius:var(--r);padding:24px;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto}
 .modal-lg{width:700px}
 .modal-title{font-size:16px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px}
-.ci{display:grid;grid-template-columns:90px 1fr 70px 90px 90px 100px 130px;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--br);font-size:12px}
+.ci{display:grid;grid-template-columns:90px 1fr 70px 90px 90px 100px 135px;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--br);font-size:12px}
 .ci:hover{background:var(--b2)}
 .ci-h{font-weight:600;color:var(--mt);font-size:11px;text-transform:uppercase;background:var(--b2)}
 .chip{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE}
@@ -137,8 +137,7 @@ var AF=[
 {nome:"LUCAS EDUARDO BRITO DE ARAUJO",numero:"000052",plano:"Anual",valor:490,diaVenc:4,diasSem:"",horario:"",prof:"Amanda",dataMatricula:"2025-05-04"},
 {nome:"MATTEO ARY",numero:"000053",plano:"Mensal",valor:420,diaVenc:18,diasSem:"Quinta",horario:"09:00",prof:"Amanda",dataMatricula:"2026-05-18"}
 ];
-var PI=[
-];
+var PI=[];
 var DI=[
 {descricao:"CONTA DE AGUA",valor:146.56,data:"2026-05-12",forma:"Boleto",tipo:"Variavel"},
 {descricao:"ALUGUEL",valor:2302.16,data:"2026-05-12",forma:"Boleto",tipo:"Fixa"},
@@ -154,7 +153,7 @@ var D={pag:[],mat:[],desp:[],aulas:[],pres:[],exp:[],caixa:[],canc:[],feedbacks:
 var user=null,tab="painel",subTab="reg",syncOk=false,agendaWeekOffset=0;
 var mesAtualCaixa=null,mesAtualPag=null,mesAtualDesp=null;
 // ===== UTILS =====
-function eCanc(n){return !!(D.canc&&D.canc.find(function(c){return c.nome===n&&(c.ativo===true||c.ativo==="true");}));}
+function eCanc(n){return !!(D.canc&&D.canc.find(function(c){return c.nome===n&&(c.ativo===true||String(c.ativo).toLowerCase()==="true");}));}
 function todosObj(){
   var lista=AF.map(function(a){return{nome:a.nome,numero:a.numero,plano:a.plano,valor:a.valor,diaVenc:a.diaVenc,diasSem:a.diasSem,horario:a.horario,prof:a.prof,fixo:true,dataMatricula:a.dataMatricula||"",desconto:a.desconto||0,promocao:a.promocao||""};});
   D.mat.forEach(function(m){if(!lista.find(function(a){return a.nome===m.nome;}))lista.push({nome:m.nome,numero:m.numero,plano:m.plano,valor:+m.valor,diaVenc:+m.diaVenc,diasSem:m.diasSem,horario:m.horario,prof:m.prof,fixo:false,dataMatricula:m.data||"",desconto:m.desconto||0,promocao:m.promocao||""});});
@@ -190,7 +189,18 @@ async function loadAba(aba){
     var rows=await r.json();
     if(!Array.isArray(rows)||rows.length<2)return[];
     var h=rows[0];
-    return rows.slice(1).map(function(row){var obj={};h.forEach(function(k,i){var v=row[i];if(v==="true")obj[k]=true;else if(v==="false")obj[k]=false;else if(v!==""&&v!==null&&v!==undefined&&!isNaN(v))obj[k]=+v;else obj[k]=v||"";});return obj;});
+    return rows.slice(1).map(function(row){
+      var obj={};
+      h.forEach(function(k,i){
+        var v=row[i];
+        var vl=String(v).toLowerCase().trim();
+        if(vl==="true")obj[k]=true;
+        else if(vl==="false")obj[k]=false;
+        else if(v!==""&&v!==null&&v!==undefined&&String(v).trim()!==""&&!isNaN(v))obj[k]=+v;
+        else obj[k]=v||"";
+      });
+      return obj;
+    });
   }catch(e){return null;}
 }
 
@@ -230,13 +240,14 @@ async function syncAll(){
   var abas=["pagamentos","matriculas","despesas","aulas","presencas","experimentais","caixa","cancelados","feedbacks","agenda"];
   var ok=true;
   for(var i=0;i<cats.length;i++){var rows=await loadAba(abas[i]);if(rows===null){ok=false;break;}if(rows.length>0)D[cats[i]]=rows;}
-  if(!ok||D.pag.length===0){D.pag=JSON.parse(JSON.stringify(PI));D.desp=JSON.parse(JSON.stringify(DI));D.caixa=gerarCaixa();await seed();}
+  if(!ok){D.pag=JSON.parse(JSON.stringify(PI));D.desp=JSON.parse(JSON.stringify(DI));D.caixa=gerarCaixa();await seed();}
+  if(D.caixa.length===0){D.caixa=gerarCaixa();var ch=["nome","valor","plano","dataVenc","pago","dataPag","numDoc","formaPag"];for(var ci=0;ci<D.caixa.length;ci++){var cc=D.caixa[ci];await push("caixa",ch,ch.map(function(h){return String(cc[h]||"");}));}}
   ensureCaixaMes();
   syncOk=ok;showLov(false);
 }
 
 async function seed(){
-  var ph=["aluno","data","tabela","desconto","bruto",,"forma","plano","banco"];
+  var ph=["aluno","data","tabela","desconto","bruto","liquido","forma","tipoOp","numDoc","banco"];
   for(var i=0;i<PI.length;i++){var p=PI[i];await push("pagamentos",ph,ph.map(function(h){return String(p[h]||"");}));}
   var dh=["descricao","valor","data","forma","tipo"];
   for(var i=0;i<DI.length;i++){var d=DI[i];await push("despesas",dh,dh.map(function(h){return String(d[h]||"");}));}
@@ -372,6 +383,7 @@ function painelHtml(){
 }
 
 // ===== CAIXA ABERTO =====
+function isPago(c){return c.pago===true||String(c.pago).toLowerCase()==="true";}
 function setMesCaixa(m){mesAtualCaixa=m;}
 function caixaHtml(){
   try{
@@ -382,11 +394,11 @@ function caixaHtml(){
   var caixaMes=D.caixa.filter(function(c){
     if(!c.dataVenc)return false;
     if(c.dataVenc.startsWith(pfx))return true;
-    if(c.dataVenc<pfx&&(c.pago===false||c.pago==="false"||!c.pago))return true;
+    if(c.dataVenc<pfx&&!isPago(c))return true;
     return false;
   });
-  var pend=caixaMes.filter(function(c){return!c.pago&&c.pago!=="true";}).sort(function(a,b){return a.dataVenc>b.dataVenc?1:-1;});
-  var rec=caixaMes.filter(function(c){return c.pago===true||c.pago==="true";});
+  var pend=caixaMes.filter(function(c){return!isPago(c);}).sort(function(a,b){return a.dataVenc>b.dataVenc?1:-1;});
+  var rec=caixaMes.filter(function(c){return isPago(c);});
   var tPend=pend.reduce(function(a,c){return a+(+c.valor||0);},0);
   var tRec=rec.reduce(function(a,c){return a+(+c.valor||0);},0);
   var hdr="<div class='ci ci-h'><span>Vencimento</span><span>Aluno</span><span>Valor</span><span>Plano</span><span>Status</span><span>Pago em</span><span>A\u00e7\u00e3o</span></div>";
@@ -401,7 +413,8 @@ function caixaHtml(){
       +"<span><span class='badge bb'>"+c.plano+"</span></span>"
       +"<span>"+st+"</span>"
       +"<span style='font-size:11px;color:var(--mt)'>\u2014</span>"
-      +"<span style='display:flex;gap:4px'><button class='btn bs bsm' onclick='abrirBaixa("+i+")'><i class='ti ti-arrow-down-circle'></i> Baixar</button><button class='btn bd bsm' onclick='excluirCaixa("+i+")' title='Excluir'><i class='ti ti-trash'></i></button></span>"
+      +"<span style='display:flex;gap:4px'><button class='btn bs bsm' onclick='abrirBaixa("+i+")'><i class='ti ti-arrow-down-circle'></i> Baixar</button>"
+      +"<button class='btn bd bsm' onclick='excluirCaixa("+i+")' title='Excluir'><i class='ti ti-trash'></i></button></span>"
       +"</div>";
   }).join("");
   var rR=rec.map(function(c){
@@ -412,23 +425,20 @@ function caixaHtml(){
       +"<span>"+c.plano+"</span>"
       +"<span><span class='chip'><i class='ti ti-check'></i> Pago</span></span>"
       +"<span style='font-size:11px'>"+fd(c.dataPag)+"</span>"
-      +"<span style='font-size:11px;color:var(--mt)'>"+(c.numDoc?"Doc: "+c.numDoc:"&#8212;")+"</span>"
+      +"<span style='font-size:11px;color:var(--mt)'>"+(c.formaPag||"&#8212;")+"</span>"
       +"</div>";
   }).join("");
-  // Seletor de meses disponíveis
   var meses_cx=new Set();
   D.caixa.forEach(function(c){if(c.dataVenc)meses_cx.add(c.dataVenc.substring(0,7));});
-  var meses_cx_arr=Array.from(meses_cx).sort().reverse();
-  var opts_cx="";
-  meses_cx_arr.forEach(function(m){
+  var opts_cx=Array.from(meses_cx).sort().reverse().map(function(m){
     var mm=m.split("-"),lbl=["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][+mm[1]]+"/"+mm[0];
     var val=String(+mm[1]).padStart(2,"0")+"/"+mm[0];
-    opts_cx+="<option value='"+val+"'"+(mesAtualCaixa===val?" selected":"")+">"+lbl+"</option>";
-  });
+    return "<option value='"+val+"'"+(mesAtualCaixa===val?" selected":"")+">"+lbl+"</option>";
+  }).join("");
   return "<div style='margin-bottom:16px'><div class='fi' style='max-width:150px'><label>M\u00eas</label>"
     +"<select onchange='setMesCaixa(this.value);refreshContent()'>"+opts_cx+"</select></div></div>"
     +"<div class='g3'>"
-    +"<div class='kpi'><div class='ka' style='background:var(--am)'></div><p class='kl'>A Receber</p><p class='kv' style='color:var(--am)'>"+BRL(tPend)+"</p><p class='ks'>"+pend.length+" pagamentos</p></div>"
+    +"<div class='kpi'><div class='ka' style='background:var(--am)'></div><p class='kl'>A Receber</p><p class='kv' style='color:var(--am)'>"+BRL(tPend)+"</p><p class='ks'>"+pend.length+" pendentes</p></div>"
     +"<div class='kpi'><div class='ka' style='background:var(--gn)'></div><p class='kl'>Entrada La\u00e7ada</p><p class='kv' style='color:var(--gn)'>"+BRL(tRec)+"</p><p class='ks'>"+rec.length+" pagamentos</p></div>"
     +"<div class='kpi'><div class='ka' style='background:var(--brand2)'></div><p class='kl'>Total Previsto</p><p class='kv' style='color:var(--brand2)'>"+BRL(tPend+tRec)+"</p><p class='ks'>"+mesAtualCaixa+"</p></div>"
     +"</div>"
@@ -436,13 +446,12 @@ function caixaHtml(){
     +(pend.length===0?"<p class='empty' style='color:var(--gn)'><i class='ti ti-check' style='font-size:24px;display:block;margin-bottom:8px'></i>Todos lan\u00e7ados!</p>":hdr+rP)
     +"</div>"
     +(rec.length>0?"<div class='card'><p class='ct'><i class='ti ti-check'></i> Entrada lan\u00e7ada ("+rec.length+")</p>"+hdr+rR+"</div>":"");
-  }catch(e){console.error("Erro caixaHtml:",e);return "<div class='card'><p class='empty'>Erro: "+e.message+"</p></div>";}
+  }catch(e){console.error("caixaHtml:",e);return "<div class='card'><p class='empty'>Erro: "+e.message+"</p></div>";}
 }
 async function excluirCaixa(idx){
   var c=D.caixa[idx];if(!c)return;
-  if(!confirm("Excluir entrada de caixa: "+c.nome+" ("+BRL(c.valor)+")?"))return;
-  D.caixa.splice(idx,1);
-  refreshContent();
+  if(!confirm("Excluir entrada de "+c.nome.split(" ")[0]+"?"))return;
+  D.caixa.splice(idx,1);refreshContent();
 }
 function abrirBaixa(idx){
   var c=D.caixa[idx],hoje=new Date().toISOString().split("T")[0];
@@ -485,13 +494,13 @@ async function confBaixa(idx){
   var data=document.getElementById("bd").value,numDoc=document.getElementById("bn").value,forma=document.getElementById("bf").value,valor=parseFloat(document.getElementById("bv").value)||0;
   if(!data){alert("Preencha a data.");return;}
   var c=D.caixa[idx];
-  var liq2=lq(valor,forma);
-  var ch=["nome","valor","plano","dataVenc","pago","dataPag","numDoc","formaPag",];
+  c.pago=true;c.dataPag=data;c.numDoc=numDoc;c.formaPag=forma;
+  var ch=["nome","valor","plano","dataVenc","pago","dataPag","numDoc","formaPag"];
   await push("caixa",ch,ch.map(function(h){return String(c[h]||"");}));
-  var desc=+((+c.valor)-valor).toFixed(2);
+  var liq2=lq(valor,forma),desc=+((+c.valor)-valor).toFixed(2);
   var pObj={aluno:c.nome,data:data,tabela:+c.valor,desconto:desc,bruto:valor,liquido:liq2,forma:forma,plano:"Mensalidade",banco:"SICREDI"};
   D.pag.push(pObj);
-  var ph=["aluno","data","tabela","desconto","bruto",,"forma","plano","banco"];
+  var ph=["aluno","data","tabela","desconto","bruto","liquido","forma","plano","banco"];
   await push("pagamentos",ph,ph.map(function(k){return String(pObj[k]||"");}));
   closeModal();refreshContent();
 }
@@ -505,23 +514,19 @@ function pagHtml(){
   var pag_mes=D.pag.filter(function(p){return p.data&&p.data.startsWith(pfxPag);});
   var meses_pg=new Set();
   D.pag.forEach(function(p){if(p.data)meses_pg.add(p.data.substring(0,7));});
-  var meses_pg_arr=Array.from(meses_pg).sort().reverse();
-  var opts_pg="";
-  meses_pg_arr.forEach(function(m){
+  var opts_pg=Array.from(meses_pg).sort().reverse().map(function(m){
     var mm=m.split("-"),lbl=["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][+mm[1]]+"/"+mm[0];
     var val=String(+mm[1]).padStart(2,"0")+"/"+mm[0];
-    opts_pg+="<option value='"+val+"'"+(mesAtualPag===val?" selected":"")+">"+lbl+"</option>";
-  });
+    return "<option value='"+val+"'"+(mesAtualPag===val?" selected":"")+">"+lbl+"</option>";
+  }).join("");
   var nomes=ativos().map(function(a){return a.nome;});
-  var cancelNomes=cancelados().map(function(a){return a.nome;});
-  var opts=nomes.concat(cancelNomes).map(function(n){return "<option>"+n+"</option>";}).join("")+"<option>Outro</option>";
+  var opts=nomes.concat(cancelados().map(function(a){return a.nome;})).map(function(n){return "<option>"+n+"</option>";}).join("")+"<option>Outro</option>";
   var rows=pag_mes.map(function(p){
     var realIdx=D.pag.indexOf(p);
     return "<tr><td>"+fd(p.data)+"</td>"
       +"<td>"+p.aluno.split(" ").slice(0,2).join(" ")+"</td>"
-      +"<td><span class='badge bb'>"+(p.tipoOp||p.plano||"Mensalidade")+"</span></td>"
+      +"<td><span class='badge bb'>"+(p.plano||p.tipoOp||"Mensalidade")+"</span></td>"
       +"<td>"+p.forma+"</td>"
-      +"<td style='font-size:11px;color:var(--mt)'>"+(p.numDoc||"&#8212;")+"</td>"
       +"<td>"+BRL(p.bruto)+"</td>"
       +"<td style='color:var(--gn);font-weight:700'>"+BRL(p.liquido)+"</td>"
       +"<td style='display:flex;gap:4px'>"
@@ -529,6 +534,7 @@ function pagHtml(){
       +"<button class='btn bd bsm' onclick='excluirPagamento("+realIdx+")' title='Excluir'><i class='ti ti-trash'></i></button>"
       +"</td></tr>";
   }).join("");
+  var totMes=pag_mes.reduce(function(a,p){return{b:a.b+(+p.bruto||0),l:a.l+(+p.liquido||0)};},{b:0,l:0});
   return "<div class='card'><p class='ct'><i class='ti ti-plus'></i> Registrar pagamento</p>"
     +"<div id='pa'></div>"
     +"<div class='fr'><div class='fi'><label>Aluno</label><select id='pal' onchange='prefillAluno()'>"+opts+"</select></div>"
@@ -538,22 +544,21 @@ function pagHtml(){
     +"<div class='fi'><label>Forma</label><select id='pf' onchange='atualizaLiq()'><option>PIX</option><option>Boleto</option><option>PIX Boleto</option><option>Dinheiro</option></select></div></div>"
     +"<div class='fr'><div class='fi'><label>Valor bruto (R$)</label><input type='number' id='pb' placeholder='0,00' step='0.01' oninput='atualizaLiq()'></div>"
     +"<div class='fi'><label>Valor l\u00edquido</label><input id='pliq' readonly style='background:var(--gl);color:var(--gn);font-weight:600'></div></div>"
-    +"<div class='fr'><div class='fi'><label>N\u00ba do documento</label><input type='text' id='pn' placeholder='N\u00ba boleto ou PIX'></div>"
-    +"<div class='fi'><label>Tipo de opera\u00e7\u00e3o</label><select id='ppl'><option>Mensalidade</option><option>Matr\u00edcula</option><option>Aula avulsa</option></select></div></div>"
+    +"<div class='fi' style='margin-bottom:10px'><label>Tipo</label><select id='ppl'><option>Mensalidade</option><option>Matr\u00edcula</option><option>Aula avulsa</option></select></div>"
     +"<button class='btn bp bf' onclick='savePag()'><i class='ti ti-check'></i> Registrar pagamento</button></div>"
     +"<div class='card'><div class='sh'><p class='ct' style='margin-bottom:0'><i class='ti ti-list'></i> Pagamentos ("+D.pag.length+")</p>"
-    +"<span style='font-size:13px;color:var(--gn);font-weight:700'>"+BRL(totP().l)+"</span></div>"
+    +"<span style='font-size:13px;color:var(--gn);font-weight:700'>L\u00edq: "+BRL(totMes.l)+"</span></div>"
     +"<div style='margin-bottom:14px'><div class='fi' style='max-width:150px'><label>M\u00eas</label>"
     +"<select onchange='setMesPag(this.value);refreshContent()'>"+opts_pg+"</select></div></div>"
-    +"<div class='ox'><table><thead><tr><th>Data</th><th>Aluno</th><th>Tipo</th><th>Forma</th><th>Doc.</th><th>Bruto</th><th>L\u00edquido</th><th></th></tr></thead>"
+    +"<div class='ox'><table><thead><tr><th>Data</th><th>Aluno</th><th>Tipo</th><th>Forma</th><th>Bruto</th><th>L\u00edquido</th><th></th></tr></thead>"
     +"<tbody>"+rows+"</tbody></table></div></div>";
-  }catch(e){console.error("Erro pagHtml:",e);return "<div class='card'><p class='empty'>Erro: "+e.message+"</p></div>";}
+  }catch(e){console.error("pagHtml:",e);return "<div class='card'><p class='empty'>Erro: "+e.message+"</p></div>";}
 }
 function editarPagamento(idx){
   var p=D.pag[idx];if(!p)return;
   var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\">"
     +"<div class='modal'>"
-    +"<p class='modal-title'><i class='ti ti-edit' style='color:var(--brand2)'></i> Editar pagamento &mdash; "+p.aluno.split(" ").slice(0,2).join(" ")+"</p>"
+    +"<p class='modal-title'><i class='ti ti-edit' style='color:var(--brand2)'></i> Editar pagamento</p>"
     +"<div style='background:var(--b2);border-radius:var(--rs);padding:10px 12px;margin-bottom:14px;font-size:12px'>"
     +"<p style='font-weight:600'>"+p.aluno+"</p>"
     +"<p style='color:var(--mt);margin-top:3px'>"+fd(p.data)+" \u2022 "+p.forma+"</p></div>"
@@ -561,15 +566,14 @@ function editarPagamento(idx){
     +"<div class='fi'><label>Forma</label><select id='epf'><option"+(p.forma==="PIX"?" selected":"")+">PIX</option><option"+(p.forma==="Boleto"?" selected":"")+">Boleto</option><option"+(p.forma==="PIX Boleto"?" selected":"")+">PIX Boleto</option><option"+(p.forma==="Dinheiro"?" selected":"")+">Dinheiro</option></select></div></div>"
     +"<div class='fr'><div class='fi'><label>Bruto (R$)</label><input type='number' id='epb' value='"+p.bruto+"' step='0.01' oninput='calcLiqEdit("+idx+")'></div>"
     +"<div class='fi'><label>L\u00edquido</label><input id='epl' readonly style='background:var(--gl);color:var(--gn);font-weight:600' value='"+p.liquido+"'></div></div>"
-    +"<div class='fr'><div class='fi'><label>N\u00ba documento</label><input type='text' id='epn' value='"+(p.numDoc||"")+"'></div>"
-    +"<div class='fi'><label>Tipo</label><select id='eppl'><option"+(p.plano==="Mensalidade"?" selected":"")+">Mensalidade</option><option"+(p.plano==="Matr\u00edcula"?" selected":"")+">Matr\u00edcula</option><option"+(p.plano==="Aula avulsa"?" selected":"")+">Aula avulsa</option></select></div></div>"
-    +"<div style='display:flex;gap:8px;margin-top:4px'>"
+    +"<div class='fi' style='margin-bottom:14px'><label>Tipo</label><select id='eppl'><option"+((p.plano||p.tipoOp)==="Mensalidade"?" selected":"")+">Mensalidade</option><option"+((p.plano||p.tipoOp)==="Matr\u00edcula"?" selected":"")+">Matr\u00edcula</option><option"+((p.plano||p.tipoOp)==="Aula avulsa"?" selected":"")+">Aula avulsa</option></select></div>"
+    +"<div style='display:flex;gap:8px'>"
     +"<button class='btn bp' style='flex:1;justify-content:center' onclick='salvarEdicaoPag("+idx+")'><i class='ti ti-check'></i> Salvar</button>"
     +"<button class='btn' onclick='closeModal()'>Cancelar</button></div>"
     +"</div></div>";
   document.getElementById("mc").innerHTML=html;
 }
-function calcLiqEdit(idx){
+function calcLiqEdit(){
   var b=parseFloat(document.getElementById("epb").value)||0;
   var f=document.getElementById("epf").value||"PIX";
   var el=document.getElementById("epl");if(el)el.value=lq(b,f).toLocaleString("pt-BR",{minimumFractionDigits:2});
@@ -579,20 +583,20 @@ async function salvarEdicaoPag(idx){
   p.data=document.getElementById("epd").value;
   p.forma=document.getElementById("epf").value;
   p.bruto=+document.getElementById("epb").value||p.bruto;
-  p.numDoc=document.getElementById("epn").value;
+  p.liquido=lq(p.bruto,p.forma);
   p.plano=document.getElementById("eppl").value;
-  var ph=["aluno","data","tabela","desconto","bruto",,"forma","plano","banco"];
+  var ph=["aluno","data","tabela","desconto","bruto","liquido","forma","plano","banco"];
   await push("pagamentos",ph,ph.map(function(k){return String(p[k]||"");}));
-  closeModal();refreshContent();
+  closeModal();refreshContent();alert(p.aluno.split(" ")[0]+" atualizado!");
 }
 async function excluirPagamento(idx){
   var p=D.pag[idx];
   if(!p)return;
   if(!confirm("Excluir pagamento de "+p.aluno.split(" ")[0]+" ("+BRL(p.bruto)+" em "+fd(p.data)+")?"))return;
-  // Reverte o caixa se necessário (marca como não pago)
-  var cx=D.caixa.find(function(c){return c.nome===p.aluno&&(c.dataPag===p.data||c.numDoc===p.numDoc);});
-  if(cx&&(cx.pago===true||cx.pago==="true")){
-    var ch=["nome","valor","plano","dataVenc","pago","dataPag","numDoc","formaPag",];
+  var cx=D.caixa.find(function(c){return c.nome===p.aluno&&(c.dataPag===p.data||c.formaPag===p.forma);});
+  if(cx&&isPago(cx)){
+    cx.pago=false;cx.dataPag="";cx.numDoc="";cx.formaPag="";
+    var ch=["nome","valor","plano","dataVenc","pago","dataPag","numDoc","formaPag"];
     await push("caixa",ch,ch.map(function(k){return String(cx[k]||"");}));
   }
   D.pag.splice(idx,1);
@@ -615,14 +619,18 @@ async function savePag(){
   var bruto=+document.getElementById("pb").value||0,forma=document.getElementById("pf").value;
   if(!data||!bruto){alert2("pa","Preencha data e valor.",false);return;}
   var liquido=lq(bruto,forma);
-  var obj={aluno:aluno,data:data,tabela:+document.getElementById("pt").value||0,desconto:+document.getElementById("pdc").value||0,bruto:bruto,liquido:liquido,forma:forma,plano:document.getElementById("ppl").value,banco:"SICREDI"};
+  var plano=document.getElementById("ppl").value;
+  var obj={aluno:aluno,data:data,tabela:+document.getElementById("pt").value||0,desconto:+document.getElementById("pdc").value||0,bruto:bruto,liquido:liquido,forma:forma,plano:plano,banco:"SICREDI"};
   D.pag.push(obj);
-  var idx=D.caixa.findIndex(function(c){return c.nome===aluno&&!c.pago&&c.pago!=="true";});
+  var idx=D.caixa.findIndex(function(c){return c.nome===aluno&&!isPago(c);});
   if(idx>=0){
-    var ch=["nome","valor","plano","dataVenc","pago","dataPag","numDoc","formaPag",];
+    D.caixa[idx].pago=true;
+    D.caixa[idx].dataPag=data;
+    D.caixa[idx].formaPag=forma;
+    var ch=["nome","valor","plano","dataVenc","pago","dataPag","numDoc","formaPag"];
     await push("caixa",ch,ch.map(function(h){return String(D.caixa[idx][h]||"");}));
   }
-  var ph=["aluno","data","tabela","desconto","bruto",,"forma","plano","banco"];
+  var ph=["aluno","data","tabela","desconto","bruto","liquido","forma","plano","banco"];
   await push("pagamentos",ph,ph.map(function(k){return String(obj[k]||"");}));
   alert2("pa","Pagamento registrado! Caixa atualizado.",true);
   setTimeout(function(){refreshContent();},800);
@@ -767,7 +775,7 @@ async function salvarEdicaoMat(nome){
     var dia=Math.min(diaVenc,new Date(ano,mes,0).getDate());
     var novaDataVenc=ano+"-"+String(mes).padStart(2,"0")+"-"+String(dia).padStart(2,"0");
     var cx=D.caixa.find(function(c){return c.nome===nome&&c.dataVenc&&c.dataVenc.startsWith(pfx)&&!c.pago&&c.pago!=="true";});
-    if(cx){cx.dataVenc=novaDataVenc;var ch=["nome","valor","plano","dataVenc","pago","dataPag","numDoc","formaPag",];await push("caixa",ch,ch.map(function(k){return String(cx[k]||"");}));}
+    if(cx){cx.dataVenc=novaDataVenc;}
   }
   closeModal();refreshContent();alert(nome.split(" ")[0]+" atualizado!");
 }
@@ -867,17 +875,15 @@ async function cancelarContrato(nome){
   if(!can){if(!confirm("Cancelar contrato de "+nome.split(" ")[0]+"?"))return;}
   if(!D.canc)D.canc=[];
   var ei=D.canc.findIndex(function(c){return c.nome===nome;});
-  var novoAtivo=can?false:true;
+  var novoAtivo=!can;
   var obj={nome:nome,fixo:String(AF.some(function(a){return a.nome===nome;})),ativo:novoAtivo,data:new Date().toISOString().split("T")[0]};
   if(ei>=0)D.canc[ei]=obj;else D.canc.push(obj);
   if(novoAtivo){
-    // Cancelando: remove do caixa (pendentes)
-    D.caixa=D.caixa.filter(function(c){return c.nome!==nome||(c.pago===true||c.pago==="true");});
+    D.caixa=D.caixa.filter(function(c){return c.nome!==nome||isPago(c);});
   } else {
-    // Reativando: re-adiciona ao caixa se não tiver entrada pendente
     var dados=getDados(nome)||AF.find(function(a){return a.nome===nome;});
     if(dados&&dados.valor){
-      var pfx=mesAtualPfx(),ja=D.caixa.find(function(c){return c.nome===nome&&!c.pago&&c.pago!=="true"&&c.dataVenc&&c.dataVenc.startsWith(pfx);});
+      var pfx=mesAtualPfx(),ja=D.caixa.find(function(c){return c.nome===nome&&!isPago(c)&&c.dataVenc&&c.dataVenc.startsWith(pfx);});
       if(!ja){
         var dVenc=dataVencMes(dados.diaVenc||1,MES_ANO.a,MES_ANO.m);
         var cObj={nome:nome,valor:dados.valor,plano:dados.plano,dataVenc:dVenc,pago:false,dataPag:"",numDoc:"",formaPag:""};
@@ -896,14 +902,13 @@ function contratosHtml(){
   var hoje=new Date().toISOString().split("T")[0];
   var rows=todos.map(function(a){
     var can=eCanc(a.nome),venc=calcVencContrato(a.dataMatricula,a.plano),st=statusContrato(venc,can);
-    return "<div class='cont-row' style='"+(can?"opacity:.55":"")+"'>"
+    return "<div class='cont-row' style='"+(can?"opacity:.5":"")+"'>"
       +"<span style='font-weight:600'>"+a.nome.split(" ").slice(0,2).join(" ")+"</span>"
       +"<span><span class='badge bb'>"+a.plano+"</span></span>"
       +"<span style='font-weight:600'>"+BRL(a.valor)+"</span>"
       +"<span style='font-size:11px'>"+fd(a.dataMatricula)+"</span>"
       +"<span style='font-size:11px'>"+(venc?fd(venc):"<span style='color:var(--mt)'>Mensal</span>")+"</span>"
-      +"<span style='display:flex;align-items:center;gap:8px'>"
-      +"<span class='badge "+st.cls+"'>"+st.label+"</span>"
+      +"<span style='display:flex;align-items:center;gap:6px'><span class='badge "+st.cls+"'>"+st.label+"</span>"
       +"<button class='btn bsm' style='"+(can?"background:var(--gl);color:var(--gn);border-color:var(--gl)":"background:var(--rl);color:var(--rd);border-color:var(--rl)")+"' data-n='"+a.nome+"' onclick='cancelarContrato(this.dataset.n)'>"
       +(can?"<i class='ti ti-refresh'></i> Reativar":"<i class='ti ti-x'></i> Cancelar")
       +"</button></span>"
@@ -918,10 +923,11 @@ function contratosHtml(){
     +"<div class='kpi'><div class='ka' style='background:var(--am)'></div><p class='kl'>Ir\u00e1 vencer</p><p class='kv' style='color:var(--am)'>"+vencMes.length+"</p><p class='ks'>este m\u00eas</p></div>"
     +"<div class='kpi'><div class='ka' style='background:var(--rd)'></div><p class='kl'>Vencidos</p><p class='kv' style='color:var(--rd)'>"+vencidos.length+"</p><p class='ks'>renova\u00e7\u00e3o pendente</p></div>"
     +"</div>"
-    +"<div class='card'><p class='ct'><i class='ti ti-file-certificate'></i> Contratos <span style='font-size:11px;font-weight:400;color:var(--mt)'>&mdash; cancelados ficam vis\u00edveis em opacidade reduzida</span></p>"
-    +"<div class='cont-row cont-h' style='grid-template-columns:1fr 80px 80px 90px 100px 160px'><span>Aluno</span><span>Plano</span><span>Valor</span><span>Matr\u00edcula</span><span>Vencimento</span><span>Status</span></div>"
+    +"<div class='card'><p class='ct'><i class='ti ti-file-certificate'></i> Contratos <span style='font-size:11px;font-weight:400;color:var(--mt)'>&mdash; cancelados ficam vis\u00edveis com opacidade reduzida</span></p>"
+    +"<div class='cont-row cont-h' style='grid-template-columns:1fr 80px 80px 90px 100px 160px'><span>Aluno</span><span>Plano</span><span>Valor</span><span>Matr\u00edcula</span><span>Vencimento</span><span>Status / A\u00e7\u00e3o</span></div>"
     +rows+"</div>";
 }
+
 
 // ===== AGENDA =====
 function getWeekDates(offset){
@@ -1218,13 +1224,11 @@ function despHtml(){
   var vr=desp_mes.filter(function(d){return d.tipo!=="Fixa";}).reduce(function(a,d){return a+(+d.valor||0);},0);
   var meses_dp=new Set();
   D.desp.forEach(function(d){if(d.data)meses_dp.add(d.data.substring(0,7));});
-  var meses_dp_arr=Array.from(meses_dp).sort().reverse();
-  var opts_dp="";
-  meses_dp_arr.forEach(function(m){
+  var opts_dp=Array.from(meses_dp).sort().reverse().map(function(m){
     var mm=m.split("-"),lbl=["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][+mm[1]]+"/"+mm[0];
     var val=String(+mm[1]).padStart(2,"0")+"/"+mm[0];
-    opts_dp+="<option value='"+val+"'"+(mesAtualDesp===val?" selected":"")+">"+lbl+"</option>";
-  });
+    return "<option value='"+val+"'"+(mesAtualDesp===val?" selected":"")+">"+lbl+"</option>";
+  }).join("");
   var rows=desp_mes.map(function(d){
     var realIdx=D.desp.indexOf(d);
     return "<tr><td style='font-weight:600'>"+d.descricao+"</td><td style='color:var(--rd);font-weight:700'>"+BRL(d.valor)+"</td>"
@@ -1253,7 +1257,7 @@ function despHtml(){
     +"</div>"
     +"<div class='card'><div class='ox'><table><thead><tr><th>Descri\u00e7\u00e3o</th><th>Valor</th><th>Data</th><th>Forma</th><th>Tipo</th><th></th></tr></thead>"
     +"<tbody>"+rows+"</tbody></table></div></div>";
-  }catch(e){console.error("Erro despHtml:",e);return "<div class='card'><p class='empty'>Erro: "+e.message+"</p></div>";}
+  }catch(e){console.error("despHtml:",e);return "<div class='card'><p class='empty'>Erro: "+e.message+"</p></div>";}
 }
 function editarDespesa(idx){
   var d=D.desp[idx];if(!d)return;
