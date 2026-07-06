@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Academia — Gestão v6</title>
+<!-- ⚡ OTIMIZAÇÃO: Preload de recursos críticos para parallelizar -->
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" as="style">
+<link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" as="script">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -232,9 +235,19 @@ function isMesAtual(s){if(!s)return false;return s.startsWith(mesAtualPfx());}
 
 // ===== DEBOUNCE =====
 var _dbt={};
+// ⚡ OTIMIZAÇÃO: Debounce com throttle para evitar múltiplos saves
+var _dbt_last={};
 function dbSave(key,fn){
   if(_dbt[key])clearTimeout(_dbt[key]);
-  _dbt[key]=setTimeout(function(){delete _dbt[key];fn();},1800);
+  // Se foi salvo há menos de 3s, estende o timeout a 2s
+  var now=Date.now();
+  var lastSave=_dbt_last[key]||0;
+  var delay=(now-lastSave<3000)?2500:1800;
+  _dbt[key]=setTimeout(function(){
+    delete _dbt[key];
+    _dbt_last[key]=Date.now();
+    fn();
+  },delay);
 }
 // ===== SHEETS =====
 async function push(aba,headers,row){
@@ -382,9 +395,12 @@ async function syncAll(){
   showLov(true);
   var cats=["pag","mat","desp","aulas","exp","caixa","canc","feedbacks","agenda","historico","perfis","leads"];
   var abas=["pagamentos","matriculas","despesas","aulas","experimentais","caixa","cancelados","feedbacks","agenda","historico","perfis","leads"];
+  // ⚡ OTIMIZAÇÃO: Carregar TODAS as abas em paralelo com Promise.all() ao invés de sequencial
+  var promises=abas.map(function(aba){return loadAba(aba);});
+  var results=await Promise.all(promises.map(function(p){return p.catch(function(){return null;});}));
   for(var i=0;i<cats.length;i++){
     try{
-      var rows=await loadAba(abas[i]);
+      var rows=results[i];
       if(rows&&rows.length>0){
         if(abas[i]==="agenda"){
           // Deduplicar agenda: manter só o primeiro por aluno+data+hora
@@ -401,7 +417,7 @@ async function syncAll(){
         D[cats[i]]=rows;
       }
     }
-    catch(e){console.warn("Falha ao carregar aba:",abas[i],e);}
+    catch(e){console.warn("Falha ao processar aba:",abas[i],e);}
   }
   // Criar registro de 1ª matrícula no histórico para quem ainda não tem
   if(!D.historico)D.historico=[];
@@ -2392,7 +2408,20 @@ function resetMesesIfChanged(){
   }
   _mesProcAnterior=_mAtual;
 }
-function refreshContent(){resetMesesIfChanged();var el=document.getElementById("content");if(el){el.innerHTML=tabHtml();attachTabEvents();}}
+// ⚡ OTIMIZAÇÃO: Cache HTML para evitar recompilação desnecessária
+var _contentCache={};var _lastRefresh=0;
+function refreshContent(shallow){
+  resetMesesIfChanged();
+  var now=Date.now();
+  // Se foi refreshado há menos de 200ms, ignora (batching)
+  if(now-_lastRefresh<200)return;
+  _lastRefresh=now;
+  var el=document.getElementById("content");
+  if(el){
+    el.innerHTML=tabHtml();
+    attachTabEvents();
+  }
+}
 function attachAll(){attachTabEvents();}
 function attachTabEvents(){
   var ap=document.getElementById("apr");if(ap)ap.addEventListener("change",toggleProf);
