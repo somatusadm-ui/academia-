@@ -200,7 +200,19 @@ function todosObj(){
   return lista;
 }
 function ativos(){return todosObj().filter(function(a){return!eCanc(a.nome);});}
-function alunosTodos(){return todosObj();}
+function alunosTodos(){
+  var lista=todosObj();
+  if(D.canc){
+    D.canc.forEach(function(c){
+      if(c.ativo===true||String(c.ativo).toLowerCase()==="true"){
+        if(!lista.find(function(a){return a.nome===c.nome;})){
+          lista.push({nome:c.nome,numero:"",plano:c.plano||"",valor:0,diaVenc:0,diasSem:"",horario:"",prof:"",fixo:false,dataMatricula:"",desconto:0,promocao:"",vencimento:""});
+        }
+      }
+    });
+  }
+  return lista;
+}
 function ativosNoMes(pfxAnoMes){
   // pfxAnoMes = "YYYY-MM"
   var partes=pfxAnoMes.split("-"),ano=+partes[0],mes=+partes[1];
