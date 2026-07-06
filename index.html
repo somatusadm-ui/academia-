@@ -205,7 +205,6 @@ function alunosTodos(){
   if(D.canc&&D.canc.length>0){
     D.canc.forEach(function(c){
       if(c.nome&&!(c.ativo===false||String(c.ativo).toLowerCase()==="false")){
-        // Incluir se ativo NÃO for explicitamente false (pode ser true, '', undefined, etc)
         if(!lista.find(function(a){return a.nome===c.nome;})){
           lista.push({nome:c.nome,numero:"",plano:c.plano||"",valor:0,diaVenc:0,diasSem:"",horario:"",prof:"",fixo:false,dataMatricula:"",desconto:0,promocao:"",vencimento:""});
         }
@@ -337,7 +336,6 @@ function gerarCaixa(){
   var pfxMes=ano+"-"+String(mes).padStart(2,"0");
   var ultimoDiaMes=new Date(ano,mes,0);
   var vistos=new Set();
-  // ⚡ OTIMIZAÇÃO: Indexar D.pag por aluno+mês
   var pagIndex={};
   D.pag.forEach(function(p){
     if(p.aluno&&p.data){
@@ -349,7 +347,6 @@ function gerarCaixa(){
   ativos().forEach(function(a){
     if(vistos.has(a.nome))return;
     vistos.add(a.nome);
-    // Nao gerar caixa se contrato ainda nao iniciou neste mes
     if(a.dataMatricula){var dm=new Date(a.dataMatricula+"T00:00:00");if(dm>ultimoDiaMes)return;}
     var dv=dataVencMes(a.diaVenc,ano,mes);
     var inf=pagIndex[a.nome+"|"+pfxMes]||null;
@@ -381,7 +378,7 @@ function ensureCaixaMes(){
     vistos.add(chave);
     return true;
   });
-  // ⚡ OTIMIZAÇÃO: Indexar D.pag por aluno+mês para evitar filtro repetido
+  // Indexar pagamentos
   var pagIndex={};
   D.pag.forEach(function(p){
     if(p.aluno&&p.data){
@@ -1588,8 +1585,7 @@ function agendaHtml(){
     +"</div>";
 }
 function abrirNovoEvento(data,hora){
-  var todosList=alunosTodos();
-  var alunosOpts=todosList.map(function(a){
+  var alunosOpts=alunosTodos().map(function(a){
     var label=a.nome.split(" ").slice(0,2).join(" ");
     var ehCancelado=eCanc(a.nome);
     return "<option>"+label+(ehCancelado?" (Cancelado)":"")+"</option>";
