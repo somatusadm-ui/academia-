@@ -203,15 +203,14 @@ function ativos(){return todosObj().filter(function(a){return!eCanc(a.nome);});}
 function alunosTodos(){
   var lista=todosObj();
   if(D.canc&&D.canc.length>0){
-    var antes=lista.length;
     D.canc.forEach(function(c){
-      if(c.nome&&(c.ativo===true||String(c.ativo).toLowerCase()==="true")){
+      if(c.nome&&!(c.ativo===false||String(c.ativo).toLowerCase()==="false")){
+        // Incluir se ativo NÃO for explicitamente false (pode ser true, '', undefined, etc)
         if(!lista.find(function(a){return a.nome===c.nome;})){
           lista.push({nome:c.nome,numero:"",plano:c.plano||"",valor:0,diaVenc:0,diasSem:"",horario:"",prof:"",fixo:false,dataMatricula:"",desconto:0,promocao:"",vencimento:""});
         }
       }
     });
-    console.log("  alunosTodos: adicionou", lista.length-antes, "cancelados a", antes, "ativos = TOTAL", lista.length);
   }
   return lista;
 }
@@ -427,10 +426,6 @@ async function syncAll(){
           });
         }
         D[cats[i]]=rows;
-        if(abas[i]==="cancelados"){
-          console.log("✅ Carregou D.canc com", rows.length, "registros");
-          if(rows.length>0){console.log("   Primeiros:", rows.slice(0,3).map(function(r){return {nome:r.nome,ativo:r.ativo};}));}
-        }
       }
     }
     catch(e){console.warn("Falha ao carregar aba:",abas[i],e);}
@@ -1594,12 +1589,6 @@ function agendaHtml(){
 }
 function abrirNovoEvento(data,hora){
   var todosList=alunosTodos();
-  console.log("🔍 DEBUG abrirNovoEvento():");
-  console.log("  - alunosTodos() retornou:", todosList.length, "alunos");
-  console.log("  - D.canc tem:", D.canc?.length || 0, "registros");
-  if(D.canc&&D.canc.length>0){
-    console.log("  - Primeiros cancelados:", D.canc.slice(0,2).map(function(c){return {nome:c.nome,ativo:c.ativo};}));
-  }
   var alunosOpts=todosList.map(function(a){
     var label=a.nome.split(" ").slice(0,2).join(" ");
     var ehCancelado=eCanc(a.nome);
@@ -1608,7 +1597,6 @@ function abrirNovoEvento(data,hora){
     +"<option disabled>— Experimentais —</option>"
     +D.exp.map(function(e){return "<option>"+e.nome+" (Exp.)</option>";}).join("")
     +"<option value='outro'>Outro nome...</option>";
-  console.log("  - Opções geradas:", alunosOpts.split("</option>").length - 1, "itens");
   var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\">"
     +"<div class='modal'>"
     +"<p class='modal-title'><i class='ti ti-calendar-plus' style='color:var(--brand2)'></i> Adicionar evento</p>"
