@@ -276,8 +276,14 @@ async function _savePagamentosNow(){var h=["aluno","data","tabela","desconto","b
 async function _saveCaixaNow(){var h=["nome","valor","plano","dataVenc","pago","dataPag","numDoc","formaPag","diasSem","oculto"];var rows=D.caixa.map(function(c){return h.map(function(k){var v=c[k];if(typeof v==="boolean")v=v?'true':'false';return String(v||"");});});await rewriteAba("caixa",h,rows);}
 async function _saveMatriculasNow(){var h=["nome","numero","data","plano","valor","diaVenc","diasSem","horario","prof","canal","desconto","promocao","dataMatricula"];var rows=D.mat.map(function(m){return h.map(function(k){return String(m[k]||"");});});await rewriteAba("matriculas",h,rows);}
 async function _saveCanceladosNow(){var h=["nome","fixo","ativo","data"];var rows=(D.canc||[]).map(function(c){return h.map(function(k){return String(c[k]||"");});});await rewriteAba("cancelados",h,rows);}
-function savePagamentos(){dbSave("pag",_savePagamentosNow);}
-function saveCaixa(){dbSave("caixa",_saveCaixaNow);}
+function savePagamentos(){
+  if(syncing){console.warn("Ignorando savePagamentos: syncAll em progresso");return;}
+  dbSave("pag",_savePagamentosNow);
+}
+function saveCaixa(){
+  if(syncing){console.warn("Ignorando saveCaixa: syncAll em progresso");return;}
+  dbSave("caixa",_saveCaixaNow);
+}
 function saveMatriculas(){dbSave("mat",_saveMatriculasNow);}
 function saveCancelados(){dbSave("canc",_saveCanceladosNow);}
 async function loadAba(aba){
