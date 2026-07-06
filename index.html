@@ -1555,11 +1555,16 @@ function agendaHtml(){
       var ds=dateStr(d);
       var eventos=(D.agenda||[]).filter(function(ev){return ev.data===ds&&ev.hora===slot;});
       var evHtml=eventos.map(function(ev){
+        if(!ev||!ev.hora)return "";
         var idx=D.agenda.indexOf(ev);
         var hp=ev.hora.split(":"),totMin=(+hp[0])*60+(+hp[1])+30;
         var fim=String(Math.floor(totMin/60)%24).padStart(2,"0")+":"+String(totMin%60).padStart(2,"0");
-        return "<div class='agenda-event ev-"+(ev.prof==="Amanda"?"amanda":"nathalia")+"' onclick='event.stopPropagation();editarEvento("+idx+")' title='"+ev.nome+" — "+ev.prof+" ("+ev.hora+"–"+fim+")'>"
-          +"<b>"+ev.prof.slice(0,3)+"</b> "+ev.nome
+        var nome=ev.nome||ev.aluno||"";
+        var prof=ev.prof||ev.professora||"Amanda";
+        if(!prof || typeof prof !== 'string') prof = "Amanda";
+        var profAbrev=prof.slice(0,3);
+        return "<div class='agenda-event ev-"+(prof==="Amanda"?"amanda":"nathalia")+"' onclick='event.stopPropagation();editarEvento("+idx+")' title='"+nome+" — "+prof+" ("+ev.hora+"–"+fim+")'>"
+          +"<b>"+profAbrev+"</b> "+nome
           +"<span style='opacity:.65;font-size:9px;display:block;margin-top:1px'>"+ev.hora+" – "+fim+"</span>"
           +"</div>";
       }).join("");
@@ -1631,14 +1636,16 @@ async function salvarEvento(){
 }
 function editarEvento(idx){
   var ev=D.agenda[idx];if(!ev)return;
+  var nome=ev.nome||ev.aluno||"";
+  var prof=ev.prof||ev.professora||"Amanda";
   var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\">"
     +"<div class='modal'>"
     +"<p class='modal-title'><i class='ti ti-edit' style='color:var(--brand2)'></i> Editar evento</p>"
     +"<div class='fr'><div class='fi'><label>Data</label><input type='date' id='agd' value='"+ev.data+"'></div>"
     +"<div class='fi'><label>Hor\u00e1rio</label><input type='time' id='agh' value='"+ev.hora+"' step='1800'></div></div>"
-    +"<div class='fi' style='margin-bottom:10px'><label>Nome</label><input type='text' id='agno' value='"+ev.nome+"'></div>"
+    +"<div class='fi' style='margin-bottom:10px'><label>Nome</label><input type='text' id='agno' value='"+nome+"'></div>"
     +"<div class='fi' style='margin-bottom:10px'><label>Professora</label>"
-    +"<select id='agp'><option"+(ev.prof==="Amanda"?" selected":"")+">Amanda</option><option"+(ev.prof==="Nathalia"?" selected":"")+">Nathalia</option></select></div>"
+    +"<select id='agp'><option"+(prof==="Amanda"?" selected":"")+">Amanda</option><option"+(prof==="Nathalia"?" selected":"")+">Nathalia</option></select></div>"
     +"<div class='fi' style='margin-bottom:14px'><label>Observa\u00e7\u00e3o</label><input type='text' id='ago' value='"+(ev.obs||"")+"'></div>"
     +"<div style='display:flex;gap:8px'>"
     +"<button class='btn bp' style='flex:1;justify-content:center' onclick='atualizarEvento("+idx+")'><i class='ti ti-check'></i> Salvar</button>"
