@@ -2432,62 +2432,6 @@ function attachTabEvents(){
 
 var agendaView="calendario";var mesAgendaAtual=new Date().getMonth();var anoAgendaAtual=new Date().getFullYear();
 
-function agendaHtml(){
-  if(!D.agenda)D.agenda=[];
-  var html="<div class='content'><div class='ct'><i class='ti ti-calendar-event'></i> Agenda de Aulas</div>";
-  
-  // === FILTRO DE MÊS ===
-  var mesesNomes=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-  html+="<div class='card' style='margin-bottom:16px'>";
-  html+="<div style='display:flex;gap:10px;align-items:center'>";
-  html+="<button class='btn' onclick='mudarMesAgenda(-1)'><i class='ti ti-chevron-left'></i></button>";
-  html+="<select id='ag-mes-select' onchange='alterarMesAgenda(this.value)' style='flex:1;font-size:13px;padding:10px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'>";
-  for(var m=0;m<12;m++){
-    html+="<option value='"+m+"' "+(m===mesAgendaAtual?"selected":"")+">"+mesesNomes[m]+" "+anoAgendaAtual+"</option>";
-  }
-  html+="</select>";
-  html+="<button class='btn' onclick='mudarMesAgenda(1)'><i class='ti ti-chevron-right'></i></button>";
-  html+="</div></div>";
-  
-  // === CALENDÁRIO DO MÊS (PEQUENO) ===
-  html+="<div class='card' style='margin-bottom:16px;max-width:220px'>";
-  html+=gerarCalendarioMes(mesAgendaAtual,anoAgendaAtual);
-  html+="</div>";
-  
-  // === FORMULARIO ===
-  html+="<div class='card' style='margin-bottom:16px'><p class='ct'><i class='ti ti-plus'></i> Adicionar Aula</p>";
-  html+="<div class='fr3' style='margin-bottom:10px'>";
-  html+="<div class='fi'><label>Tipo</label><select id='ag-tipo' onchange='toggleTipoAgenda(this.value)' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value='regular'>Regular (Matriculado)</option><option value='experimental'>Experimental</option></select></div>";
-  html+="<div class='fi' id='ag-aluno-div'><label>Aluno Matriculado</label><select id='ag-aluno' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value=''>Selecione...</option>";
-  ativos().forEach(function(a){html+="<option value='"+a.nome+"'>"+a.nome+" ("+a.plano+")</option>";});
-  html+="</select></div>";
-  html+="<div class='fi' id='ag-exp-div' style='display:none'><label>Nome</label><input type='text' id='ag-exp-nome' placeholder='Ex: João Silva' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'></div>";
-  html+="</div>";
-  html+="<div class='fr3' style='margin-bottom:10px'>";
-  html+="<div class='fi'><label>Data</label><input type='date' id='ag-data' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'></div>";
-  html+="<div class='fi'><label>Hora</label><select id='ag-hora' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value=''>Selecione...</option>";
-  for(var h=8;h<20;h++){for(var m=0;m<60;m+=30){html+="<option value='"+String(h).padStart(2,'0')+":"+String(m).padStart(2,'0')+"'>"+String(h).padStart(2,'0')+":"+String(m).padStart(2,'0')+"</option>";}}
-  html+="</select></div>";
-  html+="<div class='fi'><label>Reagendamento</label><select id='ag-reagendado' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value='nao'>Não</option><option value='sim'>Sim</option></select></div>";
-  html+="</div>";
-  html+="<div class='fr3' style='margin-bottom:10px'>";
-  html+="<div class='fi'><label>Professora</label><select id='ag-prof' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value='Amanda'>Amanda</option><option value='Nathalia'>Nathalia</option></select></div>";
-  html+="<div class='fi'><label>Frequência</label><select id='ag-freq' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value='avulso'>Avulso</option><option value='fixo'>Fixo (semanal até vencimento)</option></select></div>";
-  html+="<div class='fi'><label>Duração (min)</label><input type='number' id='ag-duracao' value='60' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'></div>";
-  html+="</div>";
-  html+="<div style='display:flex;gap:10px'><button class='btn bp' onclick='adicionarAulaAgenda()' style='flex:1'><i class='ti ti-check'></i> Adicionar</button><button class='btn' onclick='limparFormAgenda()'>Limpar</button></div>";
-  html+="<div id='ag-alert'></div></div>";
-  // === VIEW TABS ===
-  html+="<div class='card'>";
-  html+="<div style='display:flex;gap:4px;margin-bottom:16px'>";
-  html+="<button class='tab active' id='tab-mes' onclick='mudarViewAgenda(\"mes\",this)'>Mês</button>";
-  html+="<button class='tab' id='tab-semana' onclick='mudarViewAgenda(\"semana\",this)'>Semana</button>";
-  html+="<button class='tab' id='tab-dia' onclick='mudarViewAgenda(\"dia\",this)'>Dia</button>";
-  html+="<button class='tab' id='tab-lista' onclick='mudarViewAgenda(\"lista\",this)'>Lista</button>";
-  html+="</div>";
-  html+="<div id='ag-view'></div></div></div>";
-  return html;
-}
 
 function gerarCalendarioMes(mes,ano){
   var mesesNomes=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
