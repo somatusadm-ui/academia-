@@ -1583,9 +1583,10 @@ function agendaHtml(){
     +"<span style='font-size:11px;color:var(--mt)'>Clique em uma c\u00e9lula para adicionar</span></div>"
     +"<div class='ox'><div style='min-width:650px'>"+header+"</div></div>"
     +"</div>";
+  return html;
 }
 function abrirNovoEvento(data,hora){
-  var alunosOpts=alunosTodos().map(function(a){
+  var alunosOpts=alunosTodos().filter(function(a){return a&&a.nome;}).map(function(a){
     var label=a.nome.split(" ").slice(0,2).join(" ");
     var ehCancelado=eCanc(a.nome);
     return "<option>"+label+(ehCancelado?" (Cancelado)":"")+"</option>";
