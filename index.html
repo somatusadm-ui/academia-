@@ -200,6 +200,7 @@ function todosObj(){
   return lista;
 }
 function ativos(){return todosObj().filter(function(a){return!eCanc(a.nome);});}
+function alunosTodos(){return todosObj();}
 function ativosNoMes(pfxAnoMes){
   // pfxAnoMes = "YYYY-MM"
   var partes=pfxAnoMes.split("-"),ano=+partes[0],mes=+partes[1];
@@ -1561,7 +1562,11 @@ function agendaHtml(){
     +"</div>";
 }
 function abrirNovoEvento(data,hora){
-  var alunosOpts=ativos().map(function(a){return "<option>"+a.nome.split(" ").slice(0,2).join(" ")+"</option>";}).join("")
+  var alunosOpts=alunosTodos().map(function(a){
+    var label=a.nome.split(" ").slice(0,2).join(" ");
+    var ehCancelado=eCanc(a.nome);
+    return "<option>"+label+(ehCancelado?" (Cancelado)":"")+"</option>";
+  }).join("")
     +"<option disabled>— Experimentais —</option>"
     +D.exp.map(function(e){return "<option>"+e.nome+" (Exp.)</option>";}).join("")
     +"<option value='outro'>Outro nome...</option>";
