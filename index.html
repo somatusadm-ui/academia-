@@ -1019,7 +1019,7 @@ function pagHtml(){
   var totMes=pag_mes.reduce(function(a,p){return{b:a.b+(+p.bruto||0),l:a.l+(+p.liquido||0)};},{b:0,l:0});
   return "<div class='card'><p class='ct'><i class='ti ti-plus'></i> Registrar pagamento</p>"
     +"<div id='pa'></div>"
-    +"<div class='fr'><div class='fi'><label>Aluno</label><select id='pal' onchange='prefillAluno()'>"+opts+"</select></div>"
+    +"<div class='fr'><div class='fi'><label>Aluno</label><div style='display:flex;gap:8px'><select id='pal' onchange='prefillAluno()' style='flex:1'>"+opts+"</select><input type='text' id='pal_outro' placeholder='Nome da criança' style='flex:1;display:none;padding:8px 10px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'></div></div>"
     +"<div class='fi'><label>Data</label><input type='date' id='pd'></div></div>"
     +"<div class='fr3'><div class='fi'><label>Valor tabela (R$)</label><input type='number' id='pt' placeholder='0,00' step='0.01' oninput='calcBruto()'></div>"
     +"<div class='fi'><label>Desconto (R$)</label><input type='number' id='pdc' placeholder='0,00' step='0.01' oninput='calcBruto()'></div>"
@@ -1104,7 +1104,15 @@ async function excluirPagamento(idx){
 }
 function prefillAluno(){
   var nome=document.getElementById("pal").value,d=getDados(nome);
-  if(d&&d.valor){document.getElementById("pt").value=d.valor;calcBruto();}
+  var outroInput=document.getElementById("pal_outro");
+  if(nome==="Outro"){
+    outroInput.style.display="block";
+    outroInput.focus();
+  }else{
+    outroInput.style.display="none";
+    outroInput.value="";
+    if(d&&d.valor){document.getElementById("pt").value=d.valor;calcBruto();}
+  }
 }
 function calcBruto(){
   var t=parseFloat(document.getElementById("pt").value)||0;
@@ -1119,7 +1127,9 @@ function atualizaLiq(){
   if(el)el.value=lq(b,f).toLocaleString("pt-BR",{minimumFractionDigits:2});
 }
 async function savePag(){
-  var aluno=document.getElementById("pal").value,data=document.getElementById("pd").value;
+  var alunoSel=document.getElementById("pal").value,data=document.getElementById("pd").value;
+  var aluno=alunoSel==="Outro"?document.getElementById("pal_outro").value:alunoSel;
+  if(alunoSel==="Outro"&&!aluno){alert2("pa","Digite o nome da criança.",false);return;}
   var bruto=+document.getElementById("pb").value||0,forma=document.getElementById("pf").value;
   if(!data||!bruto){alert2("pa","Preencha data e valor.",false);return;}
   var liquido=lq(bruto,forma);
