@@ -235,7 +235,8 @@ function BRL(v){return "R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractio
 function fd(s){
   if(!s||s===""||s==="undefined"||s===null)return "—";
   var d;
-  if(typeof s==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(s)){var p=s.split("-");d=new Date(+p[0],+p[1]-1,+p[2]);}
+  if(typeof s==="string"&&/^\d{4}-\d{2}-\d{2}/.test(s)){var p=s.substring(0,10).split("-");d=new Date(+p[0],+p[1]-1,+p[2]);}
+  else if(typeof s==="string"&&/^\d{2}\/\d{2}\/\d{4}$/.test(s)){var p=s.split("/");d=new Date(+p[2],+p[1]-1,+p[0]);}
   else d=new Date(s);
   if(isNaN(d.getTime()))return "—";
   return d.toLocaleDateString("pt-BR");
@@ -372,7 +373,7 @@ function baixarBackup(){
   var blob=new Blob([JSON.stringify({t:Date.now(),D:D},null,1)],{type:"application/json"});
   var a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
-  a.download="backup_ge2_"+new Date().toISOString().slice(0,10)+".json";
+  a.download="backup_ge2_"+fdISO(new Date())+".json";
   a.click();URL.revokeObjectURL(a.href);
 }
 function restaurarBackupLocal(){
@@ -403,6 +404,33 @@ function saveCaixa(){
 }
 function saveMatriculas(){dbSave("mat",_saveMatriculasNow);}
 function saveCancelados(){dbSave("canc",_saveCanceladosNow);}
+// ===== HELPERS DE DATA/HORA (fuso local, sem UTC) =====
+// Formata Date -> "YYYY-MM-DD" no fuso LOCAL (toISOString usa UTC e vira o dia errado apos as 21h no Brasil)
+function fdISO(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+// Parse "YYYY-MM-DD" (ou dd/mm/yyyy) -> Date a meia-noite LOCAL (new Date("YYYY-MM-DD") interpreta como UTC e volta 1 dia)
+function pdl(s){
+  if(s instanceof Date)return s;
+  var t=String(s||"").trim();
+  var m=t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m)return new Date(+m[1],+m[2]-1,+m[3]);
+  m=t.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if(m)return new Date(+m[3],+m[2]-1,+m[1]);
+  return new Date(t);
+}
+// Extrai "HH:MM" de um valor de hora serializado pelo Sheets (data 1899-12-30 no fuso do script)
+function horaDoSheets(vs){
+  var _dh=new Date(vs);
+  if(isNaN(_dh.getTime()))return vs.substring(11,16);
+  var _hm;
+  try{
+    _hm=_dh.toLocaleTimeString("pt-BR",{timeZone:"America/Sao_Paulo",hour:"2-digit",minute:"2-digit",hour12:false});
+  }catch(e){
+    var _h2=(_dh.getUTCHours()+21)%24;_hm=String(_h2).padStart(2,"0")+":"+String(_dh.getUTCMinutes()).padStart(2,"0");
+  }
+  var _p=_hm.split(":"),_tot=(+_p[0])*60+(+_p[1]);
+  _tot=Math.round(_tot/15)*15;_tot=((_tot%1440)+1440)%1440;
+  return String(Math.floor(_tot/60)).padStart(2,"0")+":"+String(_tot%60).padStart(2,"0");
+}
 async function loadAba(aba){
   try{
     var r=await fetch(SURL+"?aba="+encodeURIComponent(aba)+"&token="+encodeURIComponent(STOKEN),{mode:"cors",headers:{"Accept":"application/json"}});
@@ -421,10 +449,9 @@ async function loadAba(aba){
         // Limpar datas ISO (ex: 2026-01-19T03:00:00.000Z → 2026-01-19)
         else if(/^\d{4}-\d{2}-\d{2}T/.test(vs)){
           if(k==="hora"||k==="horario"){
-            // Campo de horario vindo do Sheets como data/hora (ex: 1899-12-30T20:00:00.000Z) — extrai so o horario em UTC e ajusta para o fuso de Brasilia (UTC-3, sem horario de verao desde 2019)
-            var _dh=new Date(vs);
-            if(isNaN(_dh.getTime())){obj[k]=vs.substring(11,16);}
-            else{var _hh=(_dh.getUTCHours()+21)%24,_mm=_dh.getUTCMinutes();obj[k]=String(_hh).padStart(2,"0")+":"+String(_mm).padStart(2,"0");}
+            // Campo de horario vindo do Sheets como data/hora (ex: 1899-12-30T20:06:28.000Z).
+            // Converte para o fuso de Sao Paulo (Intl trata offsets historicos de 1899) e arredonda p/ 15min p/ eliminar residuos
+            obj[k]=horaDoSheets(vs);
           }else{
             obj[k]=vs.substring(0,10);
           }
@@ -669,7 +696,7 @@ function tabHtml(){
 
 // ===== PAINEL =====
 function getAcoesLeadsCard(){
-  var hoje=new Date().toISOString().split("T")[0];
+  var hoje=fdISO(new Date());
   var acoes=(D.leads||[]).filter(function(l){
     if(!l.proximaacao)return false;
     var dataProx=new Date(l.proximaacao+"T00:00:00"),dataHoje=new Date(hoje+"T00:00:00");
@@ -692,7 +719,7 @@ function painelHtml(){
   var royalties=+(t.b*0.075).toFixed(2);
   
   // ALERTA CONTRATOS VENCIDOS
-  var hoje=new Date().toISOString().split("T")[0];
+  var hoje=fdISO(new Date());
   var ativos=(D.mat||[]).filter(function(m){return!eCanc(m.nome);});
   // Remover duplicatas: manter apenas o último registro de cada aluno
   var ativosUnicos={};
@@ -701,9 +728,9 @@ ativos.forEach(function(a){
   if(!ativosUnicos[a.nome]){
     ativosUnicos[a.nome]=a;
   } else {
-    var dataAtual = new Date(a.dataMatricula || a.data || "1900-01-01");
+    var dataAtual = pdl(a.dataMatricula || a.data || "1900-01-01");
     
-    var dataExistente = new Date(
+    var dataExistente = pdl(
       ativosUnicos[a.nome].dataMatricula ||
       ativosUnicos[a.nome].data ||
       "1900-01-01"
@@ -830,7 +857,7 @@ function caixaHtml(){
   if(!mesAtualCaixa){var _d=new Date();mesAtualCaixa=String(_d.getMonth()+1).padStart(2,"0")+"/"+_d.getFullYear();}
   var _ma=mesAtualCaixa.split("/"),_cm=+_ma[0],_ca=+_ma[1];
   var pfx=_ca+"-"+String(_cm).padStart(2,"0")+"-";
-  var hoje=new Date().toISOString().split("T")[0];
+  var hoje=fdISO(new Date());
   var caixaMes=D.caixa.filter(function(c){
     if(!c.dataVenc)return false;
     if(eCanc(c.nome))return false;
@@ -947,7 +974,7 @@ async function excluirCaixa(idx){
   refreshContent();
 }
 function abrirBaixa(idx){
-  var c=D.caixa[idx],hoje=new Date().toISOString().split("T")[0];
+  var c=D.caixa[idx],hoje=fdISO(new Date());
   var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\">"
     +"<div class='modal'>"
     +"<p class='modal-title'><i class='ti ti-arrow-down-circle' style='color:var(--brand2)'></i> Registrar recebimento</p>"
@@ -1349,7 +1376,7 @@ function editarMatricula(nome){
     +"</div>"
     +"</div></div>";
   document.getElementById("mc").innerHTML=html;
-  var fbd=document.getElementById("fbd");if(fbd)fbd.value=new Date().toISOString().split("T")[0];
+  var fbd=document.getElementById("fbd");if(fbd)fbd.value=fdISO(new Date());
 }
 function switchETab(n){
   [1,2,3].forEach(function(i){
@@ -1469,7 +1496,7 @@ async function saveMat(){
 async function cancelarAluno(nome,fixo){
   if(!confirm("Cancelar matrícula de "+nome.split(" ")[0]+"?"))return;
   if(!D.canc)D.canc=[];
-  var hoje=new Date().toISOString().split("T")[0];
+  var hoje=fdISO(new Date());
   var ei=D.canc.findIndex(function(c){return c.nome===nome;});
   var obj={nome:nome,fixo:String(fixo),ativo:true,data:hoje};
   if(ei>=0)D.canc[ei]=obj;else D.canc.push(obj);
@@ -1499,7 +1526,7 @@ async function rematricularAluno(nome){
 }
 function renovarMatricula(nome){
   var d=getDados(nome);if(!d)return;
-  var hoje=new Date().toISOString().split("T")[0];
+  var hoje=fdISO(new Date());
   var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\">"
     +"<div class='modal'>"
     +"<p class='modal-title'><i class='ti ti-repeat' style='color:var(--brand2)'></i> Renovar matrícula &mdash; "+nome.split(" ").slice(0,2).join(" ")+"</p>"
@@ -1582,21 +1609,25 @@ function calcVencContrato(dataMatricula,plano){
   if(!dataMatricula||String(dataMatricula).trim()===""||plano==="Mensal")return null;
   var dm=String(dataMatricula).trim();
   var d;
-  if(/^\d{4}-\d{2}-\d{2}$/.test(dm)){
-    var p=dm.split("-");d=new Date(+p[0],+p[1]-1,+p[2]);
+  if(/^\d{4}-\d{2}-\d{2}/.test(dm)){
+    var p=dm.substring(0,10).split("-");d=new Date(+p[0],+p[1]-1,+p[2]);
   } else if(/^\d{2}\/\d{2}\/\d{4}$/.test(dm)){
     var p=dm.split("/");d=new Date(+p[2],+p[1]-1,+p[0]);
   } else {return null;}
   if(isNaN(d.getTime()))return null;
-  var dias=plano==="Trimestral"?90:plano==="Semestral"?180:plano==="Anual"?360:0;
-  if(!dias)return null;
-  d.setDate(d.getDate()+dias);
-  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  // Vencimento por MESES corridos (mesmo dia do mes), nao por dias fixos:
+  // Trimestral 11/02 -> 11/05 (antes 90 dias dava 12/05). Se o dia nao existe no mes destino, usa o ultimo dia.
+  var meses=plano==="Trimestral"?3:plano==="Semestral"?6:plano==="Anual"?12:0;
+  if(!meses)return null;
+  var anoV=d.getFullYear(),mesV=d.getMonth()+meses,diaV=d.getDate();
+  var ultimo=new Date(anoV,mesV+1,0).getDate();
+  var v=new Date(anoV,mesV,Math.min(diaV,ultimo));
+  return v.getFullYear()+"-"+String(v.getMonth()+1).padStart(2,"0")+"-"+String(v.getDate()).padStart(2,"0");
 }
 function statusContrato(venc,cancelado){
   if(cancelado)return{label:"Cancelado",cls:"br2"};
   if(!venc)return{label:"Em vigor",cls:"bg"};
-  var hoje=new Date().toISOString().split("T")[0];
+  var hoje=fdISO(new Date());
   if(venc<hoje)return{label:"Vencido",cls:"br2"};
   if(venc.slice(0,7)===hoje.slice(0,7))return{label:"Ir\u00e1 vencer",cls:"bam"};
   return{label:"Em vigor",cls:"bg"};
@@ -1607,7 +1638,7 @@ async function cancelarContrato(nome){
   if(!D.canc)D.canc=[];
   var ei=D.canc.findIndex(function(c){return c.nome===nome;});
   var novoAtivo=!can;
-  var obj={nome:nome,fixo:String(AF.some(function(a){return a.nome===nome;})),ativo:novoAtivo,data:new Date().toISOString().split("T")[0]};
+  var obj={nome:nome,fixo:String(AF.some(function(a){return a.nome===nome;})),ativo:novoAtivo,data:fdISO(new Date())};
   if(ei>=0)D.canc[ei]=obj;else D.canc.push(obj);
   
   // SE CANCELANDO: remover aulas fixas do aluno
@@ -1632,7 +1663,7 @@ async function cancelarContrato(nome){
 }
 function contratosHtml(){
   var todos=todosObj();
-  var hoje=new Date().toISOString().split("T")[0];
+  var hoje=fdISO(new Date());
   var rows=todos.map(function(a){
     var can=eCanc(a.nome),venc=calcVencContrato(a.dataMatricula,a.plano),st=statusContrato(venc,can);
     return "<div class='cont-row' style='"+(can?"opacity:.5":"")+"'>"
@@ -2630,7 +2661,7 @@ function gerarCalendarioMes(mes,ano){
   }
   
   // Dias do mês
-  var hoje=new Date().toISOString().split("T")[0];
+  var hoje=fdISO(new Date());
   for(var dia=1;dia<=diasDoMes;dia++){
     var dataStr=ano+"-"+String(mes+1).padStart(2,"0")+"-"+String(dia).padStart(2,"0");
     var isHoje=dataStr===hoje;
@@ -2704,7 +2735,7 @@ async function adicionarAulaAgenda(){
     if(alunoData.plano==="Mensal"){
       var dataIni=new Date(data);
       dataFim=new Date(dataIni.getFullYear(),dataIni.getMonth()+1,dataIni.getDate());
-      dataFim=dataFim.toISOString().split("T")[0];
+      dataFim=fdISO(dataFim);
     } else {
       dataFim=calcVencContrato(alunoData.dataMatricula,alunoData.plano);
     }
@@ -2834,7 +2865,7 @@ function renderAgendaCalendario(){
     var ds=ano+"-"+String(mes+1).padStart(2,"0")+"-"+String(dia).padStart(2,"0");
     var aulas=(D.agenda||[]).filter(function(a){return a.data===ds&&a.tipo!=="alerta_contrato"&&a.status!=="cancelado";});
     var temAlerta=(D.agenda||[]).some(function(a){return a.data===ds&&a.tipo==="alerta_contrato";});
-    var isHoje=(ds===hoje.toISOString().split("T")[0]);
+    var isHoje=(ds===fdISO(hoje));
     var bg=isHoje?"var(--bl)":"var(--b1)";
     html+="<div style='background:"+bg+";border:1px solid var(--br);border-radius:var(--rs);padding:4px;min-height:72px;cursor:pointer;overflow:hidden' onclick='abrirDiaAgenda(\""+ds+"\")'>";
     html+="<p style='font-weight:"+(isHoje?"700":"600")+";font-size:12px;margin:0 0 3px;color:"+(isHoje?"var(--brand)":"var(--tx)")+"'>"+dia+"</p>";
@@ -2876,9 +2907,9 @@ function renderAgendaSemana(){
   var diasSem=["Dom","Seg","Ter","Qua","Qui","Sex","Sab"];
   for(var d=0;d<7;d++){
     var dia=new Date(seg);dia.setDate(seg.getDate()+d);
-    var ds=dia.toISOString().split("T")[0];
+    var ds=fdISO(dia);
     var aulas=(D.agenda||[]).filter(function(a){return a.data===ds&&a.tipo!=="alerta_contrato"&&a.status!=="cancelado";});
-    var isHoje=(ds===hoje.toISOString().split("T")[0]);
+    var isHoje=(ds===fdISO(hoje));
     html+="<div style='border:1px solid "+(isHoje?"var(--brand2)":"var(--br)")+";border-radius:var(--rs);padding:6px;min-height:120px'>";
     html+="<p style='font-weight:600;font-size:11px;margin:0 0 6px;color:"+(isHoje?"var(--brand)":"var(--mt)")+"'>"+diasSem[d]+" "+dia.getDate()+"</p>";
     aulas.sort(function(a,b){return a.hora.localeCompare(b.hora);}).forEach(function(a){
@@ -2908,9 +2939,9 @@ function mudarSemanaAgenda(dias){
   var hojeReal=new Date();
   for(var d=0;d<7;d++){
     var dia=new Date(seg);dia.setDate(seg.getDate()+d);
-    var ds=dia.toISOString().split("T")[0];
+    var ds=fdISO(dia);
     var aulas=(D.agenda||[]).filter(function(a){return a.data===ds&&a.tipo!=="alerta_contrato"&&a.status!=="cancelado";});
-    var isHoje=(ds===hojeReal.toISOString().split("T")[0]);
+    var isHoje=(ds===fdISO(hojeReal));
     html+="<div style='border:1px solid "+(isHoje?"var(--brand2)":"var(--br)")+";border-radius:var(--rs);padding:6px;min-height:120px'>";
     html+="<p style='font-weight:600;font-size:11px;margin:0 0 6px;color:"+(isHoje?"var(--brand)":"var(--mt)")+"'>"+diasSem[d]+" "+dia.getDate()+"</p>";
     aulas.sort(function(a,b){return a.hora.localeCompare(b.hora);}).forEach(function(a){
@@ -2924,7 +2955,7 @@ function mudarSemanaAgenda(dias){
 }
 
 // === VISTA DIA ===
-var diaAgendaAtual=new Date().toISOString().split("T")[0];
+var diaAgendaAtual=fdISO(new Date());
 function renderAgendaDia(){
   var ds=diaAgendaAtual;
   var aulas=(D.agenda||[]).filter(function(a){return a.data===ds&&a.tipo!=="alerta_contrato"&&a.status!=="cancelado";});
@@ -2957,7 +2988,7 @@ function renderAgendaDia(){
 
 function mudarDiaAgenda(delta){
   var d=new Date(diaAgendaAtual+"T12:00");d.setDate(d.getDate()+delta);
-  diaAgendaAtual=d.toISOString().split("T")[0];
+  diaAgendaAtual=fdISO(d);
   renderAgendaView("dia",null);
 }
 
@@ -3532,7 +3563,7 @@ function alunosHtml(){
     if(pagAtual)return "ok";
     var caixaEntry=D.caixa.find(function(c){return c.nome===a.nome&&c.dataVenc&&c.dataVenc.startsWith(pfx);});
     if(!caixaEntry)return "ok";
-    var hoje=new Date().toISOString().split("T")[0];
+    var hoje=fdISO(new Date());
     if(caixaEntry.dataVenc<hoje)return "atrasado";
     return "pendente";
   }
@@ -3636,7 +3667,7 @@ function abrirPerfilAluno(nome){
   var pfxAtual=mesAtualPfx();
   var pagAtual=todosPagem.find(function(p){return p.data&&p.data.startsWith(pfxAtual);});
   var caixaAtual=D.caixa.find(function(c){return c.nome===nome&&c.dataVenc&&c.dataVenc.startsWith(pfxAtual);});
-  var hoje=new Date().toISOString().split("T")[0];
+  var hoje=fdISO(new Date());
   // Status mês atual
   var statusAtual,diasAtrasado=0;
   if(pagAtual){statusAtual="pago";}
@@ -3777,7 +3808,7 @@ function saveLeads(){dbSave("leads",saveLeadsNow);}
 function leadsHtml(){
   var leads=(D.leads||[]).filter(function(l){return l.status!=="finalizado";}).sort(function(a,b){return (a.crianca||"").localeCompare(b.crianca||"");});
   var finalizados=(D.leads||[]).filter(function(l){return l.status==="finalizado";}).sort(function(a,b){return (a.crianca||"").localeCompare(b.crianca||"");});
-  var hoje=new Date().toISOString().split("T")[0];
+  var hoje=fdISO(new Date());
   function getStatusProxAcao(proxacao){
     if(!proxacao)return {classe:"badge-futuro",texto:"—"};
     var dataProx=new Date(proxacao+"T00:00:00"),dataHoje=new Date(hoje+"T00:00:00");
