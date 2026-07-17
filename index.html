@@ -4282,10 +4282,10 @@ async function excluirPront(id){
   if(!confirm("Excluir este registro do prontuário? Isso é permanente."))return;
   var i=(D.pront||[]).findIndex(function(x){return x.id===id;});
   if(i<0)return;
-  D.pront.splice(i,1);
+  var removido=D.pront.splice(i,1)[0];
   var ok=await _saveProntNow();
   if(ok){if(prontEdit&&prontEdit.id===id)prontEdit=null;refreshContent();}
-  else{alert("Erro ao excluir no Google Sheets.");}
+  else{D.pront.splice(i,0,removido);alert("Erro ao excluir no Google Sheets. O registro NÃO foi apagado — tente novamente.");refreshContent();}
 }
 
 // ---- Tela Relatórios Pedagógicos (a partir do Prontuário) ----
@@ -4336,13 +4336,19 @@ function relatoriosPedagogicosHtml(){
   html+="<div class='card'>"+relAvaliacoesConteudo(rpAluno,false)+"</div></div>";
   return html;
 }
-function relProntAvalDet(d){
-  var h="<p style='font-size:11px;color:var(--mt,#888);margin-bottom:6px'><b>Ficha:</b> "+fichaLabel(d.ficha)+"</p>";
+function relProntAvalDet(d,pdf){
+  var h=pdf
+    ?"<p class='pdf-subtitle' style='margin-top:0'>Ficha: "+fichaLabel(d.ficha)+"</p>"
+    :"<p style='font-size:11px;color:var(--mt,#888);margin-bottom:6px'><b>Ficha:</b> "+fichaLabel(d.ficha)+"</p>";
+  var tblCls=pdf?"pdf-tbl":"";
+  var tblStyle=pdf?"":"width:100%;border-collapse:collapse;font-size:11px";
+  var subCls=pdf?"pdf-subtitle":"";
+  var subStyle=pdf?"":"font-weight:700;font-size:12px;margin:10px 0 4px";
   if(d.ficha==="fisio"){
     FIS_SECS.forEach(function(sec){
       var linhas="";
       sec.rows.forEach(function(r){var v=d[r.k];if(v)linhas+="<tr><td style='font-weight:600'>"+r.t+"</td><td>"+prEsc(v)+"</td></tr>";});
-      if(linhas)h+="<p style='font-weight:700;font-size:12px;margin:10px 0 4px'>"+sec.sec+"</p><table style='width:100%;border-collapse:collapse;font-size:11px'><tbody>"+linhas+"</tbody></table>";
+      if(linhas)h+="<p class='"+subCls+"' style='"+subStyle+"'>"+sec.sec+"</p><table class='"+tblCls+"' style='"+tblStyle+"'><tbody>"+linhas+"</tbody></table>";
     });
   }else{
     AV_SECS.forEach(function(sec){
@@ -4352,11 +4358,65 @@ function relProntAvalDet(d){
         it.s.forEach(function(sb){var v=d[it.k+"_"+sb[0]];if(v)vals.push((sb[1]?sb[1]+": ":"")+v);});
         if(vals.length)linhas+="<tr><td style='font-weight:600'>"+it.t+"</td><td>"+vals.join(" &middot; ")+"</td></tr>";
       });
-      if(linhas)h+="<p style='font-weight:700;font-size:12px;margin:10px 0 4px'>"+sec.sec+"</p><table style='width:100%;border-collapse:collapse;font-size:11px'><tbody>"+linhas+"</tbody></table>";
+      if(linhas)h+="<p class='"+subCls+"' style='"+subStyle+"'>"+sec.sec+"</p><table class='"+tblCls+"' style='"+tblStyle+"'><tbody>"+linhas+"</tbody></table>";
     });
   }
   if(d.avobs)h+="<p style='font-size:11px;margin-top:6px'><b>Observações gerais:</b> "+prEsc(d.avobs)+"</p>";
   return h;
+}
+// ---- Relatório: Evolução + Plano + Feedback ----
+// ---- PDF Premium: estilo, header e footer compartilhados ----
+var PDF_TIPO_COR={evolucoes:"#2E8FB3",plano:"#43A047",feedback:"#7B5EA7",avaliacoes:"#F57C00"};
+function pdfCssPremium(){
+  return "<style>"
+  +"*{margin:0;padding:0;box-sizing:border-box;font-family:'Plus Jakarta Sans',sans-serif}"
+  +"body{background:#f4f6f9;color:#2b2f38;padding:0;font-size:11.5px}"
+  +"@media print{body{background:#fff}@page{margin:14mm 12mm}.no-print{display:none}}"
+  +".sheet{max-width:850px;margin:0 auto;background:#fff}"
+  +".pdf-header{background:linear-gradient(135deg,#0b1e35 0%,#123054 100%);color:#fff;padding:34px 40px 26px;position:relative}"
+  +".pdf-header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(90deg,#2E8FB3,#F57C00,#43A047,#7B5EA7)}"
+  +".pdf-eyebrow{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8fb4d9;font-weight:700;margin-bottom:6px}"
+  +".pdf-title{font-size:23px;font-weight:800;letter-spacing:-0.3px;margin-bottom:4px}"
+  +".pdf-sub{font-size:12px;color:#c3d3e6;font-weight:500}"
+  +".pdf-meta{font-size:10px;color:#8fa8c4;margin-top:10px;display:flex;gap:16px;flex-wrap:wrap}"
+  +".pdf-meta b{color:#e8eef6;font-weight:600}"
+  +".pdf-logo{position:absolute;top:34px;right:40px;text-align:right;font-size:10px;color:#8fa8c4}"
+  +".pdf-logo b{display:block;font-size:13px;color:#fff;font-weight:800;letter-spacing:0.3px}"
+  +".pdf-body{padding:30px 40px 10px}"
+  +".pdf-section-title{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:800;color:#0b1e35;margin:26px 0 14px;padding-bottom:8px;border-bottom:2px solid #e7ebf1}"
+  +".pdf-section-title:first-child{margin-top:0}"
+  +".pdf-count{font-size:10px;font-weight:700;color:#fff;background:#8b95a3;border-radius:20px;padding:2px 9px}"
+  +".pdf-card{background:#fff;border:1px solid #e7ebf1;border-left:4px solid #ccc;border-radius:10px;padding:16px 18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(11,30,53,0.06);page-break-inside:avoid}"
+  +".pdf-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px}"
+  +".pdf-date{font-weight:800;font-size:13px;color:#0b1e35}"
+  +".pdf-badge{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#fff;border-radius:20px;padding:3px 10px}"
+  +".pdf-field{margin:6px 0;font-size:11px;line-height:1.5}"
+  +".pdf-field b{color:#0b1e35;font-weight:700}"
+  +".pdf-tbl{width:100%;border-collapse:collapse;font-size:10.5px;margin-top:4px}"
+  +".pdf-tbl tr:nth-child(even){background:#f7f9fb}"
+  +".pdf-tbl td{padding:5px 9px;border-bottom:1px solid #eef1f5}"
+  +".pdf-tbl td:first-child{font-weight:600;color:#3a4250;width:46%}"
+  +".pdf-subtitle{font-weight:700;font-size:11.5px;color:#0b1e35;margin:12px 0 4px}"
+  +".pdf-empty{padding:40px;text-align:center;color:#98a2b0;font-size:12px}"
+  +".pdf-footer{padding:18px 40px 30px;border-top:1px solid #e7ebf1;margin-top:18px;display:flex;justify-content:space-between;font-size:9.5px;color:#98a2b0}"
+  +"</style>";
+}
+function pdfHeaderPremium(eyebrow,titulo,sub,mi){
+  var h="<div class='pdf-header'><div class='pdf-eyebrow'>"+eyebrow+"</div>";
+  h+="<div class='pdf-title'>"+prEsc(titulo)+"</div>";
+  h+="<div class='pdf-sub'>"+prEsc(sub)+"</div>";
+  if(mi)h+="<div class='pdf-meta'><span><b>"+mi+"</b></span></div>";
+  h+="<div class='pdf-logo'><b>Ge Dois Academia</b>Prontuário Pedagógico</div>";
+  h+="</div>";
+  return h;
+}
+function pdfFooterPremium(){
+  var hoje=new Date(),pad=function(n){return n<10?"0"+n:n;};
+  var ger=pad(hoje.getDate())+"/"+pad(hoje.getMonth()+1)+"/"+hoje.getFullYear()+" às "+pad(hoje.getHours())+":"+pad(hoje.getMinutes());
+  return "<div class='pdf-footer'><span>Documento gerado automaticamente pelo sistema Ge Dois Academia</span><span>Gerado em "+ger+"</span></div>";
+}
+function pdfBadge(tipo,label){
+  return "<span class='pdf-badge' style='background:"+(PDF_TIPO_COR[tipo]||"#8b95a3")+"'>"+label+"</span>";
 }
 // ---- Relatório: Evolução + Plano + Feedback ----
 function relEvolucaoFiltra(aluno){
@@ -4374,26 +4434,33 @@ function relEvolucaoConteudo(aluno,pdf){
   var recs=relEvolucaoFiltra(aluno);
   var tipos=[["evolucoes","Evoluções"],["plano","Plano Terapêutico"],["feedback","Feedbacks aos Pais"]];
   var h="";
-  if(recs.length===0)return "<p class='empty'>Nenhum registro de evolução, plano ou feedback no período/aluno selecionado.</p>";
+  if(recs.length===0)return pdf?"<div class='pdf-empty'>Nenhum registro de evolução, plano ou feedback no período/aluno selecionado.</div>":"<p class='empty'>Nenhum registro de evolução, plano ou feedback no período/aluno selecionado.</p>";
   tipos.forEach(function(tp){
     var rr=recs.filter(function(r){return r.tipo===tp[0];});
     if(rr.length===0)return;
-    h+="<h3 style='font-size:14px;margin:16px 0 8px;border-bottom:2px solid "+(pdf?"#0b1e35":"var(--brand)")+";padding-bottom:4px'>"+tp[1]+" ("+rr.length+")</h3>";
+    if(pdf)h+="<div class='pdf-section-title'>"+tp[1]+" <span class='pdf-count'>"+rr.length+"</span></div>";
+    else h+="<h3 style='font-size:14px;margin:16px 0 8px;border-bottom:2px solid var(--brand);padding-bottom:4px'>"+tp[1]+" ("+rr.length+")</h3>";
     rr.forEach(function(r){
       var d=prDados(r);
-      h+="<div style='border:1px solid "+(pdf?"#ddd":"var(--br)")+";border-radius:8px;padding:10px;margin-bottom:10px;page-break-inside:avoid'>";
-      h+="<p style='font-weight:700;font-size:12px;margin:0 0 6px'>"+fd(r.data)+"</p>";
+      if(pdf){
+        h+="<div class='pdf-card' style='border-left-color:"+PDF_TIPO_COR[r.tipo]+"'>";
+        h+="<div class='pdf-card-head'><span class='pdf-date'>"+fd(r.data)+"</span>"+pdfBadge(r.tipo,tp[1])+"</div>";
+      }else{
+        h+="<div style='border:1px solid var(--br);border-radius:8px;padding:10px;margin-bottom:10px;page-break-inside:avoid'>";
+        h+="<p style='font-weight:700;font-size:12px;margin:0 0 6px'>"+fd(r.data)+"</p>";
+      }
+      var pField=pdf?"pdf-field":"";
       if(r.tipo==="evolucoes"){
-        if(d.objetivos)h+="<p style='font-size:11px;margin:3px 0'><b>Objetivos:</b> "+prEsc(d.objetivos)+"</p>";
-        if(d.exercicios)h+="<p style='font-size:11px;margin:3px 0'><b>Exercícios:</b> "+prEsc(d.exercicios)+"</p>";
-        if(d.evolucao)h+="<p style='font-size:11px;margin:3px 0'><b>Evolução observada:</b> "+prEsc(d.evolucao)+"</p>";
-        if(d.obs)h+="<p style='font-size:11px;margin:3px 0'><b>Observações:</b> "+prEsc(d.obs)+"</p>";
+        if(d.objetivos)h+="<p class='"+pField+"' style='"+(pdf?"":"font-size:11px;margin:3px 0")+"'><b>Objetivos:</b> "+prEsc(d.objetivos)+"</p>";
+        if(d.exercicios)h+="<p class='"+pField+"' style='"+(pdf?"":"font-size:11px;margin:3px 0")+"'><b>Exercícios:</b> "+prEsc(d.exercicios)+"</p>";
+        if(d.evolucao)h+="<p class='"+pField+"' style='"+(pdf?"":"font-size:11px;margin:3px 0")+"'><b>Evolução observada:</b> "+prEsc(d.evolucao)+"</p>";
+        if(d.obs)h+="<p class='"+pField+"' style='"+(pdf?"":"font-size:11px;margin:3px 0")+"'><b>Observações:</b> "+prEsc(d.obs)+"</p>";
       }else if(r.tipo==="plano"){
-        if(d.curto)h+="<p style='font-size:11px;margin:3px 0'><b>Curto prazo:</b> "+prEsc(d.curto)+"</p>";
-        if(d.medio)h+="<p style='font-size:11px;margin:3px 0'><b>Médio prazo:</b> "+prEsc(d.medio)+"</p>";
-        if(d.longo)h+="<p style='font-size:11px;margin:3px 0'><b>Longo prazo:</b> "+prEsc(d.longo)+"</p>";
+        if(d.curto)h+="<p class='"+pField+"' style='"+(pdf?"":"font-size:11px;margin:3px 0")+"'><b>Curto prazo:</b> "+prEsc(d.curto)+"</p>";
+        if(d.medio)h+="<p class='"+pField+"' style='"+(pdf?"":"font-size:11px;margin:3px 0")+"'><b>Médio prazo:</b> "+prEsc(d.medio)+"</p>";
+        if(d.longo)h+="<p class='"+pField+"' style='"+(pdf?"":"font-size:11px;margin:3px 0")+"'><b>Longo prazo:</b> "+prEsc(d.longo)+"</p>";
       }else if(r.tipo==="feedback"){
-        if(d.feedback)h+="<p style='font-size:11px;margin:3px 0'>"+prEsc(d.feedback)+"</p>";
+        if(d.feedback)h+="<p class='"+pField+"' style='"+(pdf?"":"font-size:11px;margin:3px 0")+"'>"+prEsc(d.feedback)+"</p>";
       }
       h+="</div>";
     });
@@ -4402,16 +4469,13 @@ function relEvolucaoConteudo(aluno,pdf){
 }
 function gerarPDFEvolucao(){
   if(!rpAluno){alert("Selecione um aluno.");return;}
-  var hoje=new Date(),pad=function(n){return n<10?"0"+n:n;};
-  var ger=pad(hoje.getDate())+"/"+pad(hoje.getMonth()+1)+"/"+hoje.getFullYear();
-  var per=rpModo==="periodo"?("Período: "+(rpIni?fd(rpIni):"início")+" a "+(rpFim?fd(rpFim):"hoje")):"Relatório completo";
+  var per=rpModo==="periodo"?("Período: "+(rpIni?fd(rpIni):"início")+" a "+(rpFim?fd(rpFim):"hoje")):"Relatório completo — todas as datas";
   var mi=rpMatriculaInfo(rpAluno);
-  var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap' rel='stylesheet'><style>*{margin:0;padding:0;box-sizing:border-box;font-family:'Plus Jakarta Sans',sans-serif}body{background:#fff;color:#222;padding:32px;font-size:11px}@media print{body{padding:20px}@page{margin:16mm}}td{padding:4px 8px;border-bottom:1px solid #eee}h3{color:#0b1e35}</style></head><body>";
-  h+="<div style='border-bottom:3px solid #0b1e35;padding-bottom:14px;margin-bottom:18px;display:flex;justify-content:space-between'>";
-  h+="<div><div style='font-size:20px;font-weight:800;color:#0b1e35'>Relatório de Evolução — "+prEsc(rpAluno)+"</div><div style='font-size:12px;color:#555;margin-top:2px'>"+per+"</div>"+(mi?"<div style='font-size:11px;color:#777;margin-top:2px'>"+mi+"</div>":"")+"</div>";
-  h+="<div style='text-align:right;font-size:10px;color:#888'><div>Gerado em: "+ger+"</div><div>Ge Dois Academia</div></div></div>";
-  h+=relEvolucaoConteudo(rpAluno,true);
-  h+="</body></html>";
+  var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap' rel='stylesheet'>"+pdfCssPremium()+"</head><body><div class='sheet'>";
+  h+=pdfHeaderPremium("Relatório Pedagógico","Evolução, Plano e Feedback — "+rpAluno,per,mi);
+  h+="<div class='pdf-body'>"+relEvolucaoConteudo(rpAluno,true)+"</div>";
+  h+=pdfFooterPremium();
+  h+="</div></body></html>";
   var w=window.open("","_blank","width=900,height=700");if(!w){alert("Bloqueador de pop-up ativado.");return;}
   w.document.write(h);w.document.close();w.focus();
   setTimeout(function(){w.print();},1200);
@@ -4426,13 +4490,21 @@ function relAvaliacoesFiltra(aluno){
 }
 function relAvaliacoesConteudo(aluno,pdf){
   var recs=relAvaliacoesFiltra(aluno);
-  if(recs.length===0)return "<p class='empty'>"+(rpAvModo==="uma"?"Selecione uma data de avaliação.":"Nenhuma avaliação registrada para este aluno.")+"</p>";
+  if(recs.length===0){
+    var msg=rpAvModo==="uma"?"Selecione uma data de avaliação.":"Nenhuma avaliação registrada para este aluno.";
+    return pdf?"<div class='pdf-empty'>"+msg+"</div>":"<p class='empty'>"+msg+"</p>";
+  }
   var h="";
   recs.forEach(function(r){
     var d=prDados(r);
-    h+="<div style='border:1px solid "+(pdf?"#ddd":"var(--br)")+";border-radius:8px;padding:10px;margin-bottom:14px;page-break-inside:avoid'>";
-    h+="<p style='font-weight:700;font-size:13px;margin:0 0 6px'>"+fd(r.data)+(d.tipoav?" — "+prEsc(d.tipoav):"")+"</p>";
-    h+=relProntAvalDet(d);
+    if(pdf){
+      h+="<div class='pdf-card' style='border-left-color:"+PDF_TIPO_COR.avaliacoes+"'>";
+      h+="<div class='pdf-card-head'><span class='pdf-date'>"+fd(r.data)+"</span>"+pdfBadge("avaliacoes",d.tipoav||"Avaliação")+"</div>";
+    }else{
+      h+="<div style='border:1px solid var(--br);border-radius:8px;padding:10px;margin-bottom:14px;page-break-inside:avoid'>";
+      h+="<p style='font-weight:700;font-size:13px;margin:0 0 6px'>"+fd(r.data)+(d.tipoav?" — "+prEsc(d.tipoav):"")+"</p>";
+    }
+    h+=relProntAvalDet(d,pdf);
     h+="</div>";
   });
   return h;
@@ -4440,16 +4512,13 @@ function relAvaliacoesConteudo(aluno,pdf){
 function gerarPDFAvaliacoes(){
   if(!rpAluno){alert("Selecione um aluno.");return;}
   if(rpAvModo==="uma"&&!rpAvData){alert("Selecione a data da avaliação.");return;}
-  var hoje=new Date(),pad=function(n){return n<10?"0"+n:n;};
-  var ger=pad(hoje.getDate())+"/"+pad(hoje.getMonth()+1)+"/"+hoje.getFullYear();
-  var tit=rpAvModo==="uma"?"Relatório de Avaliação":"Relatório de Avaliações";
+  var tit=rpAvModo==="uma"?"Avaliação — "+rpAluno:"Todas as Avaliações — "+rpAluno;
   var mi=rpMatriculaInfo(rpAluno);
-  var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap' rel='stylesheet'><style>*{margin:0;padding:0;box-sizing:border-box;font-family:'Plus Jakarta Sans',sans-serif}body{background:#fff;color:#222;padding:32px;font-size:11px}@media print{body{padding:20px}@page{margin:16mm}}td{padding:4px 8px;border-bottom:1px solid #eee}h3{color:#0b1e35}</style></head><body>";
-  h+="<div style='border-bottom:3px solid #0b1e35;padding-bottom:14px;margin-bottom:18px;display:flex;justify-content:space-between'>";
-  h+="<div><div style='font-size:20px;font-weight:800;color:#0b1e35'>"+tit+" — "+prEsc(rpAluno)+"</div>"+(mi?"<div style='font-size:11px;color:#777;margin-top:2px'>"+mi+"</div>":"")+"</div>";
-  h+="<div style='text-align:right;font-size:10px;color:#888'><div>Gerado em: "+ger+"</div><div>Ge Dois Academia</div></div></div>";
-  h+=relAvaliacoesConteudo(rpAluno,true);
-  h+="</body></html>";
+  var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap' rel='stylesheet'>"+pdfCssPremium()+"</head><body><div class='sheet'>";
+  h+=pdfHeaderPremium("Relatório Pedagógico",tit,rpAvModo==="uma"?"Avaliação individual":"Histórico completo de avaliações",mi);
+  h+="<div class='pdf-body'>"+relAvaliacoesConteudo(rpAluno,true)+"</div>";
+  h+=pdfFooterPremium();
+  h+="</div></body></html>";
   var w=window.open("","_blank","width=900,height=700");if(!w){alert("Bloqueador de pop-up ativado.");return;}
   w.document.write(h);w.document.close();w.focus();
   setTimeout(function(){w.print();},1200);
