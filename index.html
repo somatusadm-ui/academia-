@@ -419,7 +419,16 @@ async function loadAba(aba){
         if(vl==="true")obj[k]=true;
         else if(vl==="false")obj[k]=false;
         // Limpar datas ISO (ex: 2026-01-19T03:00:00.000Z → 2026-01-19)
-        else if(/^\d{4}-\d{2}-\d{2}T/.test(vs))obj[k]=vs.substring(0,10);
+        else if(/^\d{4}-\d{2}-\d{2}T/.test(vs)){
+          if(k==="hora"||k==="horario"){
+            // Campo de horario vindo do Sheets como data/hora (ex: 1899-12-30T20:00:00.000Z) — extrai so o horario em UTC e ajusta para o fuso de Brasilia (UTC-3, sem horario de verao desde 2019)
+            var _dh=new Date(vs);
+            if(isNaN(_dh.getTime())){obj[k]=vs.substring(11,16);}
+            else{var _hh=(_dh.getUTCHours()+21)%24,_mm=_dh.getUTCMinutes();obj[k]=String(_hh).padStart(2,"0")+":"+String(_mm).padStart(2,"0");}
+          }else{
+            obj[k]=vs.substring(0,10);
+          }
+        }
         else if(k==="numero"||k==="telefone")obj[k]=vs; // telefone fica como texto (não perde zero/formato)
         else if(v!==""&&v!==null&&v!==undefined&&vs!==""&&!isNaN(v))obj[k]=+v;
         else obj[k]=v||"";
