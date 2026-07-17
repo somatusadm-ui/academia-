@@ -4289,10 +4289,27 @@ async function excluirPront(id){
 }
 
 // ---- Tela Relatórios Pedagógicos (a partir do Prontuário) ----
-function rpMatriculaInfo(aluno){
+function primeiraMatriculaData(aluno){
+  var hist=(D.historico||[]).filter(function(h){return h.nome===aluno;});
+  // 1) preferir o evento explícito "matricula" (criado uma única vez, nunca sobrescrito)
+  var mEvt=hist.filter(function(h){return h.evento==="matricula";});
+  if(mEvt.length){
+    mEvt.sort(function(a,b){return String(a.dataEvento||a.dataMatricula).localeCompare(String(b.dataEvento||b.dataMatricula));});
+    return mEvt[0].dataMatricula||mEvt[0].dataEvento||"";
+  }
+  // 2) fallback: menor data de qualquer evento do histórico (matricula ou renovacao)
+  if(hist.length){
+    hist.sort(function(a,b){return String(a.dataEvento||a.dataMatricula).localeCompare(String(b.dataEvento||b.dataMatricula));});
+    return hist[0].dataMatricula||hist[0].dataEvento||"";
+  }
+  // 3) último fallback: dataMatricula atual (pode ser de rematrícula, mas é o único dado disponível)
   var a=todosObj().find(function(x){return x.nome===aluno;});
-  if(!a||!a.dataMatricula)return "";
-  return "Matrícula (1ª): "+fd(a.dataMatricula);
+  return a?(a.dataMatricula||""):"";
+}
+function rpMatriculaInfo(aluno){
+  var d=primeiraMatriculaData(aluno);
+  if(!d)return "";
+  return "Matrícula (1ª): "+fd(d);
 }
 function relatoriosPedagogicosHtml(){
   if(!D.pront)D.pront=[];
