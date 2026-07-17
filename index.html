@@ -571,7 +571,8 @@ async function syncAll(){
   var todosList=todosObj();
   for(var i=0;i<todosList.length;i++){
     var a=todosList[i];
-    var jaTem=D.historico.find(function(h){return h.nome===a.nome&&h.evento==="matricula";});
+    // Nao criar se ja existe QUALQUER registro de matricula/renovacao (evita fabricar "1a matricula" com a data da renovacao)
+    var jaTem=D.historico.find(function(h){return h.nome===a.nome&&(h.evento==="matricula"||h.evento==="renovacao");});
     if(!jaTem&&a.dataMatricula){
       var hObj={nome:a.nome,plano:a.plano,valor:a.valor,diaVenc:a.diaVenc,prof:a.prof,
         dataMatricula:a.dataMatricula,dataRenovacao:"",
@@ -1403,6 +1404,12 @@ function editarHistorico(idx,nome){
     +"</div></div>";
   document.getElementById("mc").innerHTML=html;
 }
+// Persiste TODO o historico na aba do Sheets (usado por edicao, renovacao e cancelamento)
+async function saveHistoricoAll(){
+  var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento"];
+  var rows=(D.historico||[]).map(function(x){return hh.map(function(k){return String(x[k]||"");});});
+  await rewriteAba("historico",hh,rows);
+}
 async function salvarEdicaoHistorico(idx,nome){
   var h=D.historico[idx];if(!h)return;
   h.dataMatricula=document.getElementById("hedm").value;
@@ -1410,10 +1417,7 @@ async function salvarEdicaoHistorico(idx,nome){
   h.plano=document.getElementById("hepl").value;
   h.valor=+document.getElementById("hev").value||h.valor;
   h.dataRenovacao=document.getElementById("hedr").value;
-  // Reescrever aba historico
-  var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento"];
-  var rows=D.historico.map(function(x){return hh.map(function(k){return String(x[k]||"");});});
-  await rewriteAba("historico",hh,rows);
+  await saveHistoricoAll();
   editarMatricula(nome);
 }
 async function salvarEdicaoMat(nome){
@@ -1508,6 +1512,7 @@ async function cancelarAluno(nome,fixo){
       dataMatricula:d.dataMatricula||"",dataRenovacao:"",vencimento:"",
       evento:"cancelado",dataEvento:hoje};
     D.historico.push(hObj);
+    await saveHistoricoAll(); // persiste o evento de cancelamento no historico
   }
   D.caixa=D.caixa.filter(function(c){return c.nome!==nome||(c.pago===true||c.pago==="true");});
   await saveCancelados();
@@ -1565,11 +1570,17 @@ async function confirmarRenovacao(nome){
     ||(af?af.dataMatricula:"")
     ||"";
   var vencAtual=calcVencContrato(dataMatAtual,d.plano)||"";
-  // Salvar período anterior no histórico como renovação
   if(!D.historico)D.historico=[];
-  var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento"];
-  var hObj={nome:nome,plano:d.plano,valor:d.valor,diaVenc:d.diaVenc,prof:d.prof,
-    dataMatricula:dataMatAtual,dataRenovacao:novaData,vencimento:vencAtual,
+  // 1) Garantir que o periodo ANTERIOR esteja registrado (se o aluno ainda nao tem historico, cria a 1a matricula com os dados antigos)
+  var temHist=D.historico.some(function(h){return h.nome===nome&&(h.evento==="matricula"||h.evento==="renovacao");});
+  if(!temHist&&dataMatAtual){
+    D.historico.push({nome:nome,plano:d.plano,valor:d.valor,diaVenc:d.diaVenc,prof:d.prof,
+      dataMatricula:dataMatAtual,dataRenovacao:"",vencimento:vencAtual,
+      evento:"matricula",dataEvento:dataMatAtual});
+  }
+  // 2) Registrar o NOVO periodo como renovacao (plano/valor/vencimento novos)
+  var hObj={nome:nome,plano:novoPlano,valor:novoValor,diaVenc:novoDv,prof:novoProf,
+    dataMatricula:novaData,dataRenovacao:novaData,vencimento:calcVencContrato(novaData,novoPlano)||"",
     evento:"renovacao",dataEvento:novaData};
   D.historico.push(hObj);
   // Atualizar AF e D.mat com novo plano
@@ -1584,6 +1595,7 @@ async function confirmarRenovacao(nome){
   }
   D.caixa=gerarCaixa();
   ensureCaixaMes();
+  await saveHistoricoAll(); // persiste a renovacao no Sheets (antes ficava so na memoria e sumia ao recarregar)
   await saveMatriculas();
   await saveCaixa();
   closeModal();refreshContent();alert(nome.split(" ")[0]+" renovado com sucesso!");
