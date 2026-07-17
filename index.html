@@ -133,7 +133,7 @@ function getMesAtual(){var d=new Date(),ms=["Janeiro","Fevereiro","Marco","Abril
 var MES=getMesAtual();
 var MES_ANO=(function(){var d=new Date();return{m:d.getMonth()+1,a:d.getFullYear()};})();
 // Senhas armazenadas como SHA-256 (não ficam mais legíveis no código-fonte)
-var SENHAS_HASH={Catarina:"03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",Secretaria:"770212214c3d2a29c48bbe0931750fa64021b76e4d1533b78ed838c392430e6b"};
+var SENHAS_HASH={Catarina:"03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",Secretaria:"770212214c3d2a29c48bbe0931750fa64021b76e4d1533b78ed838c392430e6b","Professora Amanda":"14cae243f043579fcc8c33e98f4252cf4d237758d734f39cc0a7452931b2eab8"};
 async function sha256hex(s){var b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,"0");}).join("");}
 var TAXA={PIX:0,Boleto:1.89,"PIX Boleto":1.25,Dinheiro:0};
 var DIAS=["Domingo","Segunda","Terca","Quarta","Quinta","Sexta","Sabado","Segunda e Quarta","Terca e Quinta","Segunda, Quarta e Sexta","Terca, Quinta e Sabado"];
@@ -163,7 +163,7 @@ var DI=[
 {descricao:"FAXINA",valor:500,data:"2026-05-12",forma:"PIX",tipo:"Fixa"},
 {descricao:"MEI PROFESSORA NATHALIA",valor:81.05,data:"2026-05-12",forma:"PIX",tipo:"Fixa"}
 ];
-var D={pag:[],mat:[],desp:[],aulas:[],exp:[],caixa:[],canc:[],feedbacks:[],agenda:[],historico:[],perfis:[],leads:[]};
+var D={pag:[],mat:[],desp:[],aulas:[],exp:[],caixa:[],canc:[],feedbacks:[],agenda:[],historico:[],perfis:[],leads:[],pront:[]};
 var syncing=false;
 // ===== PROTEÇÃO DE DADOS (auditoria 15/07) =====
 var STOKEN="GE2-8eb07dfdb4b0b702ff08cd94"; // token validado no Apps Script
@@ -535,8 +535,37 @@ function ensureCaixaMes(){
 async function syncAll(){
   syncing=true;
   showLov(true);
-  var cats=["pag","mat","desp","aulas","exp","caixa","canc","feedbacks","agenda","historico","perfis","leads"];
-  var abas=["pagamentos","matriculas","despesas","aulas","experimentais","caixa","cancelados","feedbacks","agenda","historico","perfis","leads"];
+  var cats=[
+  "pag",
+  "mat",
+  "desp",
+  "aulas",
+  "exp",
+  "caixa",
+  "canc",
+  "feedbacks",
+  "agenda",
+  "historico",
+  "perfis",
+  "leads",
+  "pront"
+];
+
+var abas=[
+  "pagamentos",
+  "matriculas",
+  "despesas",
+  "aulas",
+  "experimentais",
+  "caixa",
+  "cancelados",
+  "feedbacks",
+  "agenda",
+  "historico",
+  "perfis",
+  "leads",
+  "prontuario"
+];
   // ⚡ OTIMIZAÇÃO: Carregar TODAS as abas em paralelo com Promise.all() ao invés de sequencial
   var promises=abas.map(function(aba){return loadAba(aba);});
   var results=await Promise.all(promises.map(function(p){return p.catch(function(){return null;});}));
@@ -567,6 +596,7 @@ async function syncAll(){
   }
   // Criar registro de 1ª matrícula no histórico para quem ainda não tem
   if(!D.historico)D.historico=[];
+  if(!D.pront)D.pront=[];
   var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento"];
   var todosList=todosObj();
   for(var i=0;i<todosList.length;i++){
@@ -618,7 +648,7 @@ function loginHtml(){
     +"<div id='la'></div>"
     +"<div class='fi' style='margin-bottom:12px'><label>Usu\u00e1rio</label>"
     +"<select id='lu' style='font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;width:100%;margin-top:4px'>"
-    +"<option value=''>Selecione...</option><option value='Catarina'>Catarina</option><option value='Secretaria'>Secretaria</option>"
+    +"<option value=''>Selecione.</option><option value='Catarina'>Catarina</option><option value='Secretaria'>Secretaria</option><option value='Professora Amanda'>Professora Amanda</option>"
     +"</select></div>"
     +"<div class='fi' style='margin-bottom:16px'><label>Senha</label>"
     +"<input type='password' id='ls' onkeydown=\"if(event.key==='Enter')doLogin2()\" style='font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;width:100%;margin-top:4px'>"
@@ -630,8 +660,8 @@ async function doLogin2(){
   var u=document.getElementById("lu").value,s=document.getElementById("ls").value,el=document.getElementById("la");
   if(!u){el.innerHTML="<div style='background:#FADBD8;color:#C0392B;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:12px'>Selecione o usu\u00e1rio.</div>";return;}
   if((await sha256hex(s))!==SENHAS_HASH[u]){el.innerHTML="<div style='background:#FADBD8;color:#C0392B;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:12px'>Senha incorreta.</div>";return;}
-  user={name:u,role:u==="Catarina"?"Gestora":"Secretaria"};
-  tab="painel";render();syncAll().then(function(){render();attachAll();});
+  user={name:u,role:u==="Catarina"?"Gestora":u==="Professora Amanda"?"Professora":"Secretaria"};
+  tab=user.role==="Professora"?"agenda":"painel";render();syncAll().then(function(){render();attachAll();});
 }
 var NAV=[
   {id:"painel",icon:"ti-chart-bar",label:"Painel"},
@@ -647,11 +677,17 @@ var NAV=[
 ];
 function appHtml(){
   var isCat=user.role==="Gestora";
-  var navAll=NAV.slice();
-  // Secretária não vê aba Professoras
-  if(!isCat)navAll=navAll.filter(function(n){return n.id!=="professoras";});
-  // Relatório disponível para ambos os perfis
-  navAll.push({id:"relatorio",icon:"ti-file-export",label:"Relat\u00f3rio"});
+var isProf=user.role==="Professora";
+var navAll=NAV.slice();
+
+if(isProf){
+navAll=navAll.filter(function(n){return["agenda","presenca"].includes(n.id);});
+navAll.push({id:"prontuario",icon:"ti-notes",label:"Prontuário"});
+navAll.push({id:"relatorios_pedagogicos",icon:"ti-file-text",label:"Relatórios Pedagógicos"});
+}else{
+if(!isCat)navAll=navAll.filter(function(n){return n.id!=="professoras";});
+navAll.push({id:"relatorio",icon:"ti-file-export",label:"Relatório"});
+}
   var pendExp=D.exp.filter(function(e){return!e.convertido&&!e.naoConvertido;}).length;
   var pfx=mesAtualPfx();
   var caixaMes=D.caixa.filter(function(c){return c.dataVenc&&c.dataVenc.startsWith(pfx);});
@@ -674,6 +710,7 @@ function appHtml(){
     +"<div style='display:flex;align-items:center;gap:10px'>"
     +(user.role==="Gestora"?"<button class='btn bsm' title='Baixar backup (JSON)' onclick='baixarBackup()'><i class='ti ti-download'></i></button>"
     +"<button class='btn bsm' title='Restaurar backup local' onclick='restaurarBackupLocal()'><i class='ti ti-history'></i></button>":"")
+    +(user.role==="Professora"?"<button class='btn bsm' title='Restaurar backup local (recuperar dados não salvos)' onclick='restaurarBackupLocal()'><i class='ti ti-history'></i></button>":"")
     +"<button class='btn bsm' onclick='recarregar()'><i class='ti ti-refresh'></i></button>"
     +"<span class='mbadge'><i class='ti ti-calendar'></i> "+MES+"</span>"
     +"</div></div>"
@@ -681,6 +718,7 @@ function appHtml(){
     +"<div class='content' id='content'>"+tabHtml()+"</div></div></div>";
 }
 function tabHtml(){
+  if(user&&user.role==="Professora"&&["agenda","presenca","prontuario","relatorios_pedagogicos"].indexOf(tab)<0){return "<div class='card'><p class='empty'><i class='ti ti-lock'></i> Acesso restrito.</p></div>";}
   if(tab==="painel")return painelHtml();
   if(tab==="alunos")return alunosHtml();
   if(tab==="caixa")return caixaHtml();
@@ -691,6 +729,8 @@ function tabHtml(){
   if(tab==="despesas")return despHtml();
   if(tab==="professoras"){if(user.role!=="Gestora"){return "<div class='card'><p class='empty'><i class='ti ti-lock'></i> Acesso restrito.</p></div>";}return profHtml();}
   if(tab==="presenca")return presencaHtml();
+  if(tab==="prontuario")return prontuarioHtml();
+  if(tab==="relatorios_pedagogicos")return relatoriosPedagogicosHtml();
   if(tab==="relatorio")return relHtml();
   return "";
 }
@@ -2615,7 +2655,7 @@ function agendaHtml(){
   html+="</div>";
   
   // === FORMULARIO ===
-  html+="<div class='card' style='margin-bottom:16px'><p class='ct'><i class='ti ti-plus'></i> Adicionar Aula</p>";
+  if(user.role!=="Professora"){html+="<div class='card' style='margin-bottom:16px'><p class='ct'><i class='ti ti-plus'></i> Adicionar Aula</p>";
   html+="<div class='fr3' style='margin-bottom:10px'>";
   html+="<div class='fi'><label>Tipo</label><select id='ag-tipo' onchange='toggleTipoAgenda(this.value)' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value='regular'>Regular (Matriculado)</option><option value='experimental'>Experimental</option></select></div>";
   html+="<div class='fi' id='ag-aluno-div'><label>Aluno Matriculado</label><select id='ag-aluno' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value=''>Selecione...</option>";
@@ -2636,7 +2676,7 @@ function agendaHtml(){
   html+="<div class='fi'><label>Duração (min)</label><input type='number' id='ag-duracao' value='60' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'></div>";
   html+="</div>";
   html+="<div style='display:flex;gap:10px'><button class='btn bp' onclick='adicionarAulaAgenda()' style='flex:1'><i class='ti ti-check'></i> Adicionar</button><button class='btn' onclick='limparFormAgenda()'>Limpar</button></div>";
-  html+="<div id='ag-alert'></div></div>";
+  html+="<div id='ag-alert'></div></div>";}
   // === VIEW TABS ===
   html+="<div class='card'>";
   html+="<div style='display:flex;gap:4px;margin-bottom:16px'>";
@@ -2721,6 +2761,7 @@ function limparFormAgenda(){
 }
 
 async function adicionarAulaAgenda(){
+  if(user&&user.role==="Professora"){alert("Perfil somente visualização na Agenda.");return;}
   var tipo=document.getElementById("ag-tipo").value;
   var nomeOriginal=tipo==="regular"?document.getElementById("ag-aluno").value:(document.getElementById("ag-exp-nome").value||"").trim();
   var reagendado=document.getElementById("ag-reagendado").value==="sim";
@@ -2973,7 +3014,7 @@ function renderAgendaDia(){
   var aulas=(D.agenda||[]).filter(function(a){return a.data===ds&&a.tipo!=="alerta_contrato"&&a.status!=="cancelado";});
   aulas.sort(function(a,b){return a.hora.localeCompare(b.hora);});
   var html="<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:12px'>";
-  html+="<button class='btn' onclick='mudarDiaAgenda(-1)'><i class='ti ti-chevron-left'></i></button>";
+  if(user.role!=="Professora"){html+="<button class='btn bsm' onclick='excluirAula("+agendaIdx+")'><i class='ti ti-trash'></i> Excluir</button>";}
   html+="<strong style='font-size:14px'>"+new Date(ds+"T12:00").toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"})+"</strong>";
   html+="<button class='btn' onclick='mudarDiaAgenda(1)'><i class='ti ti-chevron-right'></i></button></div>";
   if(aulas.length===0){html+="<div class='empty'>Nenhuma aula neste dia</div>";}
@@ -2989,8 +3030,10 @@ function renderAgendaDia(){
       if(presLabel){html+="<p style='font-size:11px;font-weight:600;margin:4px 0 0;color:"+(a.presenca==="falta"?"#D32F2F":"#2E8FB3")+"'>"+presLabel+"</p>";}
       html+="</div>";
       html+="<div style='display:flex;flex-direction:column;gap:4px'>";
+      if(user.role!=="Professora"){
       html+="<button class='btn bsm' style='background:#2E8FB3;color:#fff;border:none' onclick='marcarPresenca("+agendaIdx+",\"presenca\")'><i class='ti ti-check'></i> Presença</button>";
       html+="<button class='btn bsm' style='background:#D32F2F;color:#fff;border:none' onclick='marcarPresenca("+agendaIdx+",\"falta\")'><i class='ti ti-x'></i> Falta</button>";
+      }
       html+="<button class='btn bsm' onclick='excluirAula("+agendaIdx+")'><i class='ti ti-trash'></i> Excluir</button>";
       html+="</div></div></div>";
     });
@@ -3022,9 +3065,11 @@ function abrirDiaAgenda(data){
       html+="<p style='font-size:12px;color:var(--mt);margin:0'>"+a.hora+" • "+a.duracao+" min • "+a.professora+"</p>";
       if(presLabel){html+="<p style='font-size:11px;font-weight:600;margin:4px 0 0;color:"+(a.presenca==="falta"?"#D32F2F":"#2E8FB3")+"'>"+presLabel+"</p>";}
       html+="<div style='display:flex;gap:6px;margin-top:8px'>";
-      html+="<button class='btn bsm' style='background:#2E8FB3;color:#fff;border:none;flex:1' onclick='marcarPresenca("+agendaIdx+",\"presenca\")'>✓ Presença</button>";
-      html+="<button class='btn bsm' style='background:#D32F2F;color:#fff;border:none;flex:1' onclick='marcarPresenca("+agendaIdx+",\"falta\")'>✗ Falta</button>";
-      html+="<button class='btn bd bsm' onclick='excluirAula("+agendaIdx+")' style='flex:0'><i class='ti ti-trash'></i></button>";
+if(user.role!=="Professora"){
+html+="<button class='btn bsm' style='background:#2E8FB3;color:#fff;border:none' onclick='marcarPresenca("+agendaIdx+",\"presenca\")'><i class='ti ti-check'></i> Presença</button>";
+      html+="<button class='btn bsm' style='background:#D32F2F;color:#fff;border:none' onclick='marcarPresenca("+agendaIdx+",\"falta\")'><i class='ti ti-x'></i> Falta</button>";
+}
+      if(user.role!=="Professora"){html+="<button class='btn bd bsm' onclick='excluirAula("+agendaIdx+")' style='flex:0'><i class='ti ti-trash'></i></button>";}
       html+="</div></div>";
     });
     html+="</div>";
@@ -3148,6 +3193,7 @@ async function confirmarReagendamento(idx){
 
 // === EXCLUIR ===
 async function excluirAula(idx){
+  if(user&&user.role==="Professora"){alert("Perfil somente visualização na Agenda.");return;}
   if(!confirm("Excluir esta aula? Isso é permanente."))return;
   D.agenda.splice(idx,1);
   var ok=await _saveAgendaNow();
@@ -3156,6 +3202,7 @@ async function excluirAula(idx){
 }
 
 async function excluirTodas(){
+  if(user&&user.role==="Professora"){alert("Perfil somente visualização na Agenda.");return;}
   if(!confirm("Excluir TODAS as aulas? Isso é permanente e não pode ser desfeito."))return;
   D.agenda=[];
   var ok=await _saveAgendaNow();
@@ -3183,9 +3230,11 @@ function renderAgendaLista(){
     html+="<td>"+a.professora+"</td>";
     html+="<td style='color:"+(a.presenca==="falta"?"#D32F2F":a.presenca==="presenca"?"#2E8FB3":"var(--mt)")+"'>"+presLabel+"</td>";
     html+="<td style='display:flex;gap:4px'>";
-    html+="<button class='btn bsm' style='background:#2E8FB3;color:#fff;border:none' onclick='marcarPresenca("+agendaIdx+",\"presenca\")'>✓</button>";
+if(user.role!=="Professora"){
+html+="<button class='btn bsm' style='background:#2E8FB3;color:#fff;border:none' onclick='marcarPresenca("+agendaIdx+",\"presenca\")'>✓</button>";
     html+="<button class='btn bsm' style='background:#D32F2F;color:#fff;border:none' onclick='marcarPresenca("+agendaIdx+",\"falta\")'>✗</button>";
-    html+="<button class='btn bd bsm' onclick='excluirAula("+agendaIdx+")'><i class='ti ti-trash'></i></button>";
+}
+    if(user.role!=="Professora"){html+="<button class='btn bd bsm' onclick='excluirAula("+agendaIdx+")'><i class='ti ti-trash'></i></button>";}
     html+="</td></tr>";
   });
   html+="</tbody></table></div>";
@@ -3946,8 +3995,408 @@ function exportarLeadsPDF(){
   setTimeout(function(){w.print();},1200);
 }
 
+
+// ============================================================
+// ===== MÓDULO PRONTUÁRIO + RELATÓRIOS (Professora Amanda) =====
+// ============================================================
+function prontAlunosLista(){
+  var l=[];
+  ativos().forEach(function(a){l.push({nome:a.nome,st:"Ativo"});});
+  cancelados().forEach(function(a){l.push({nome:a.nome,st:"Cancelado"});});
+  return l;
+}
+var prontAluno="",prontSub="evolucoes",prontEdit=null;
+var prontFicha="motora"; // qual ficha de avaliação está selecionada: "motora" ou "fisio"
+var rpAluno="",rpModo="completo",rpIni="",rpFim="";
+
+function prDados(r){try{if(!r.dados)return{};return typeof r.dados==="string"?JSON.parse(r.dados):r.dados;}catch(e){return{};}}
+async function _saveProntNow(){
+  var h=["id","aluno","tipo","data","dados"];
+  var rows=(D.pront||[]).map(function(p){
+    var dd=typeof p.dados==="string"?p.dados:JSON.stringify(p.dados||{});
+    return [String(p.id||""),String(p.aluno||""),String(p.tipo||""),String(p.data||""),dd];
+  });
+  return await rewriteAba("prontuario",h,rows);
+}
+
+// ---- Definições da ficha de Avaliação (anexos) ----
+var PR_OPT=["","Realiza","Parcial","Não realiza"];
+var AV_SECS=[
+ {sec:"Habilidades Motoras — Básico",items:[
+  {t:"Equilibrar",k:"equilibrar",s:[["pd","Pé direito"],["pe","Pé esquerdo"]]},
+  {t:"Pular",k:"pular",s:[["p1","Com 1 pé"],["p2","Com 2 pés"]]},
+  {t:"Subir escada",k:"subesc",s:[["ca","Com apoio"],["sa","Sem apoio"]]},
+  {t:"Descer escada",k:"desesc",s:[["mp","Mesmo pé"],["pdif","Pés diferentes"]]},
+  {t:"Pular do step",k:"pstep",s:[["u",""]]},
+  {t:"Sentar / Levantar",k:"sentlev",s:[["sen","Sentar"],["lev","Levantar"]]},
+  {t:"Escada no chão",k:"escchao",s:[["d","Dissocia"],["nd","Não dissocia"]]},
+  {t:"Escada espaldar",k:"escesp",s:[["d","Dissocia"],["nd","Não dissocia"]]},
+  {t:"Passar na trave",k:"trave",s:[["l","Lado"],["f","Frente"]]},
+  {t:"Chutar bola",k:"chutar",s:[["eq","Equilibra"],["deq","Desequilibra"]]},
+  {t:"Pedalar",k:"pedalar",s:[["cl","C/ locomoção"],["sl","S/ locomoção"]]},
+  {t:"Patinete",k:"patinete",s:[["ca","C/ auxílio"],["sa","S/ auxílio"]]},
+  {t:"Cambalhota",k:"camb",s:[["ca","Com auxílio"],["sa","Sem auxílio"]]},
+  {t:"Andar",k:"andar",s:[["u",""]]},
+  {t:"Segurar bola",k:"segbola",s:[["ep","Em pé"],["se","Sentado"]]},
+  {t:"Segurar bola com mão",k:"segbolam",s:[["u",""]]}
+ ]},
+ {sec:"Habilidades Motoras — Avançado",items:[
+  {t:"Pular corda só",k:"cordaso",s:[["ca","C/ auxílio"],["sa","S/ auxílio"]]},
+  {t:"Pular corda batida",k:"cordabat",s:[["u",""]]},
+  {t:"Deslocamento lateral",k:"desloc",s:[["pd","P/ direita"],["pe","P/ esquerda"]]},
+  {t:"Pular com um pé só em sequência",k:"pulseq",s:[["u",""]]},
+  {t:"Andar de costas na trave",k:"costastrave",s:[["u",""]]},
+  {t:"Pular dentro e fora do bambolê",k:"bamboledf",s:[["u",""]]},
+  {t:"Passar por dentro do bambolê",k:"bamboledentro",s:[["u",""]]},
+  {t:"Correr",k:"correr",s:[["u",""]]},
+  {t:"Pular de lado (elástico)",k:"elastico",s:[["u",""]]},
+  {t:"Chutar bola em movimento",k:"chutmov",s:[["pe","Pé esquerdo"],["pd","Pé direito"]]},
+  {t:"Pular atravessando um step",k:"pulstep",s:[["u",""]]},
+  {t:"Correr em diferentes velocidades",k:"corrvel",s:[["u",""]]},
+  {t:"Correr e chutar",k:"corrchut",s:[["pe","Pé esquerdo"],["pd","Pé direito"]]},
+  {t:"Parar bola com o pé",k:"pararbola",s:[["pe","Pé esquerdo"],["pd","Pé direito"]]},
+  {t:"Correr em curvas ou desviando",k:"corrcurva",s:[["u",""]]},
+  {t:"Acertar objetos em um alvo",k:"alvo",s:[["u",""]]}
+ ]},
+ {sec:"Exercícios",items:[
+  {t:"Polichinelo",k:"polich",s:[["u",""]]},
+  {t:"Flexão",k:"flexao",s:[["cm","C/ módulo"],["sm","S/ módulo"]]},
+  {t:"Senta, rola e levanta",k:"sentarola",s:[["u",""]]},
+  {t:"Lagartixa",k:"lagartixa",s:[["u",""]]},
+  {t:"Cambalhota pra trás",k:"cambtras",s:[["u",""]]},
+  {t:"Abdominal (apoio)",k:"abd1",s:[["ca","Com apoio"],["sa","Sem apoio"]]},
+  {t:"Abdominal (pé)",k:"abd2",s:[["sp","Segurando pé"],["ns","Não segurando"]]},
+  {t:"Estrelinha",k:"estrelinha",s:[["u",""]]}
+ ]}
+];
+var FIS_COORD=["","Normal","Hipermetria","Hipometria","Decomposição de movimento","Tremor de ação","Não testável"];
+var FIS_SECS=[
+ {sec:"Exame Físico",rows:[
+  {k:"fala",t:"Fala/Linguagem",tp:"sel",o:["","Verbal","Não verbal","Afasia","Disartrias","Hipofonia","Normal"]},
+  {k:"fala_obs",t:"Obs. Fala",tp:"txt"},
+  {k:"trof",t:"Trofismo",tp:"sel",o:["","Normal","Hipotrofia","Hipertrofia"]},
+  {k:"trof_local",t:"Trofismo — Local",tp:"txt"},
+  {k:"contr",t:"Contraturas/deformidades",tp:"sel",o:["","Sim","Não"]},
+  {k:"contr_obs",t:"Obs. Contraturas",tp:"txt"}
+ ]},
+ {sec:"Arco de Movimento (Ativo)",rows:["Ombro","Cotovelo","Punho","Dedos","Quadril","Joelho","Tornozelo"].map(function(j){return{k:"adm_"+j.toLowerCase(),t:j,tp:"sel",o:["","Completo","Incompleto"]};})},
+ {sec:"Força Muscular",rows:[
+  {k:"fm_ombro_flex",t:"Ombro — Flexão",tp:"txt"},{k:"fm_ombro_abd",t:"Ombro — Abdução",tp:"txt"},{k:"fm_ombro_ext",t:"Ombro — Extensão",tp:"txt"},
+  {k:"fm_cotovelo_flex",t:"Cotovelo — Flexão",tp:"txt"},{k:"fm_cotovelo_ext",t:"Cotovelo — Extensão",tp:"txt"},
+  {k:"fm_quadril_flex",t:"Quadril — Flexão",tp:"txt"},{k:"fm_quadril_abd",t:"Quadril — Abdução",tp:"txt"},{k:"fm_quadril_ext",t:"Quadril — Extensão",tp:"txt"},
+  {k:"fm_joelho_flex",t:"Joelho — Flexão",tp:"txt"},{k:"fm_joelho_ext",t:"Joelho — Extensão",tp:"txt"},
+  {k:"fm_tornozelo_dorsi",t:"Tornozelo — Dorsiflexão",tp:"txt"},{k:"fm_tornozelo_planti",t:"Tornozelo — Plantiflexão",tp:"txt"}
+ ]},
+ {sec:"Tônus Muscular",rows:[
+  {k:"tonus",t:"Tônus",tp:"sel",o:["","Normal","Hipotonia","Hipertonia plástica","Hipertonia elástica"]},
+  {k:"tonus_onde",t:"Onde",tp:"txt"}
+ ]},
+ {sec:"Coordenação Motora",rows:[
+  {k:"co_bolafita",t:"Bola-Fita",tp:"sel",o:FIS_COORD},
+  {k:"co_bolabola",t:"Bola-Bola",tp:"sel",o:FIS_COORD},
+  {k:"co_bolater",t:"Bola-Terapeuta",tp:"sel",o:FIS_COORD}
+ ]},
+ {sec:"Espaldar / Cama de Gato",rows:[
+  {k:"esp_subir",t:"Subir no espaldar",tp:"sel",o:["","Normal","Com auxílio","Independente"]},
+  {k:"esp_subir_dis",t:"Subir — Dissocia",tp:"sel",o:["","Sim","Não"]},
+  {k:"esp_lat",t:"Deslocamento lateral no espaldar",tp:"sel",o:["","Normal","Com auxílio","Independente"]},
+  {k:"esp_lat_dis",t:"Desloc. lateral — Dissocia",tp:"sel",o:["","Sim","Não"]},
+  {k:"camagato",t:"Cama de Gato",tp:"sel",o:["","Normal","Com auxílio","Independente"]},
+  {k:"camagato_dis",t:"Cama de Gato — Dissocia",tp:"sel",o:["","Sim","Não"]}
+ ]},
+ {sec:"Equilíbrio",rows:[].concat.apply([],[["est","Estático"],["din","Dinâmico"],["rec","Recuperado"]].map(function(e){return[
+  {k:"eq_"+e[0]+"_apto",t:e[1]+" — Apto/Inapto",tp:"sel",o:["","Apto","Inapto"]},
+  {k:"eq_"+e[0]+"_indep",t:e[1]+" — Independência",tp:"sel",o:["","Independente","Com auxílio"]},
+  {k:"eq_"+e[0]+"_deseq",t:e[1]+" — Desequilibrou",tp:"sel",o:["","Sim","Não"]},
+  {k:"eq_"+e[0]+"_obs",t:e[1]+" — Obs",tp:"txt"}
+ ];}))}
+];
+
+// ---- UI helpers ----
+function prInp(id,val,ph){return "<input type='text' id='"+id+"' value=\""+String(val||"").replace(/"/g,"&quot;")+"\" placeholder='"+(ph||"")+"' style='font-size:12px;padding:7px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'>";}
+function prTxa(id,val,ph){return "<textarea id='"+id+"' rows='3' placeholder='"+(ph||"")+"' style='font-size:12px;padding:7px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx);resize:vertical'>"+String(val||"").replace(/</g,"&lt;")+"</textarea>";}
+function prSel(id,opts,val){
+  var h="<select id='"+id+"' style='font-size:12px;padding:7px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'>";
+  opts.forEach(function(o){h+="<option value=\""+o+"\""+(String(val||"")===o?" selected":"")+">"+(o===""?"—":o)+"</option>";});
+  return h+"</select>";
+}
+function prDate(id,val){return "<input type='date' id='"+id+"' value='"+(val||fdISO(new Date()))+"' style='font-size:12px;padding:7px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'>";}
+function prEsc(v){return String(v||"").replace(/</g,"&lt;");}
+
+// ---- Tela Prontuário ----
+function prontuarioHtml(){
+  if(!D.pront)D.pront=[];
+  var html="<div class='content'><div class='ct'><i class='ti ti-notes'></i> Prontuário</div>";
+  html+="<div class='card' style='margin-bottom:16px'><div class='fi'><label>Aluno (ativos e cancelados)</label>";
+  html+="<select id='pr-aluno' onchange='prontAluno=this.value;prontEdit=null;prontFicha=\"motora\";refreshContent()' style='font-size:13px;padding:9px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value=''>Selecione...</option>";
+  prontAlunosLista().forEach(function(a){html+="<option value=\""+a.nome.replace(/"/g,"&quot;")+"\""+(prontAluno===a.nome?" selected":"")+">"+a.nome+(a.st==="Cancelado"?" (Cancelado)":"")+"</option>";});
+  html+="</select></div></div>";
+  if(!prontAluno)return html+"<div class='card'><p class='empty'><i class='ti ti-user-search'></i> Selecione um aluno para abrir o prontuário.</p></div></div>";
+  var subs=[["evolucoes","Evoluções"],["avaliacoes","Avaliações"],["plano","Plano"],["feedback","Feedback"]];
+  html+="<div style='display:flex;gap:4px;margin-bottom:14px;flex-wrap:wrap'>";
+  subs.forEach(function(s){html+="<button class='tab"+(prontSub===s[0]?" active":"")+"' onclick='prontSub=\""+s[0]+"\";prontEdit=null;prontFicha=\"motora\";refreshContent()'>"+s[1]+"</button>";});
+  html+="</div>";
+  var d=prontEdit?prDados(prontEdit):{};
+  var ed=!!prontEdit;
+  var recs=(D.pront||[]).filter(function(r){return r.aluno===prontAluno&&r.tipo===prontSub;}).sort(function(a,b){return String(b.data).localeCompare(String(a.data));});
+
+  if(prontSub==="evolucoes"){
+    html+="<div class='card' style='margin-bottom:16px'><p class='ct'><i class='ti ti-"+(ed?"edit":"plus")+"'></i> "+(ed?"Editar":"Nova")+" Evolução</p>";
+    html+="<div class='fr3' style='margin-bottom:10px'><div class='fi'><label>Data</label>"+prDate("pr-data",ed?prontEdit.data:"")+"</div></div>";
+    html+="<div class='fi' style='margin-bottom:10px'><label>Objetivos</label>"+prTxa("pr-obj",d.objetivos)+"</div>";
+    html+="<div class='fi' style='margin-bottom:10px'><label>Exercícios</label>"+prTxa("pr-exe",d.exercicios)+"</div>";
+    html+="<div class='fi' style='margin-bottom:10px'><label>Evolução observada</label>"+prTxa("pr-evo",d.evolucao)+"</div>";
+    html+="<div class='fi' style='margin-bottom:10px'><label>Observações</label>"+prTxa("pr-obs",d.obs)+"</div>";
+    html+=prontBtns()+"</div>";
+  }
+  if(prontSub==="avaliacoes"){
+    if(ed&&d.ficha)prontFicha=d.ficha;
+    html+="<div class='card' style='margin-bottom:16px'><p class='ct'><i class='ti ti-"+(ed?"edit":"plus")+"'></i> "+(ed?"Editar":"Nova")+" Avaliação</p>";
+    html+="<div class='fr3' style='margin-bottom:12px'><div class='fi'><label>Data</label>"+prDate("pr-data",ed?prontEdit.data:"")+"</div>";
+    html+="<div class='fi'><label>Tipo</label>"+prSel("pr-tipoav",["","Inicial","Reavaliação"],d.tipoav)+"</div>";
+    html+="<div class='fi'><label>Ficha</label><select id='pr-ficha' onchange='prontFicha=this.value;refreshContent()' style='font-size:12px;padding:7px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'>";
+    html+="<option value='motora'"+(prontFicha==="motora"?" selected":"")+">Ficha de Avaliação (Motora — GEDOIS)</option>";
+    html+="<option value='fisio'"+(prontFicha==="fisio"?" selected":"")+">Avaliação Fisioterapêutica</option>";
+    html+="</select></div></div>";
+    if(prontFicha==="motora"){
+      AV_SECS.forEach(function(sec,si){
+        html+="<details "+(si===0?"open":"")+" style='margin-bottom:10px;border:1px solid var(--br);border-radius:10px;padding:10px'><summary style='cursor:pointer;font-weight:600;font-size:13px'>"+sec.sec+"</summary><div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:10px'>";
+        sec.items.forEach(function(it){
+          html+="<div style='border:1px solid var(--br);border-radius:8px;padding:8px'><div style='font-size:12px;font-weight:600;margin-bottom:6px'>"+it.t+"</div>";
+          it.s.forEach(function(sb){
+            html+="<div style='margin-bottom:5px'>"+(sb[1]?"<div style='font-size:10px;color:var(--mt)'>"+sb[1]+"</div>":"")+prSel("pf_"+it.k+"_"+sb[0],PR_OPT,d[it.k+"_"+sb[0]])+"</div>";
+          });
+          html+="</div>";
+        });
+        html+="</div></details>";
+      });
+    }else{
+      FIS_SECS.forEach(function(sec,si){
+        html+="<details "+(si===0?"open":"")+" style='margin-bottom:10px;border:1px solid var(--br);border-radius:10px;padding:10px'><summary style='cursor:pointer;font-weight:600;font-size:13px'>"+sec.sec+"</summary><div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:10px'>";
+        sec.rows.forEach(function(r){
+          html+="<div class='fi'><label style='font-size:10px'>"+r.t+"</label>"+(r.tp==="sel"?prSel("pf_"+r.k,r.o,d[r.k]):prInp("pf_"+r.k,d[r.k]))+"</div>";
+        });
+        html+="</div></details>";
+      });
+    }
+    html+="<div class='fi' style='margin-bottom:10px'><label>Observações gerais</label>"+prTxa("pr-avobs",d.avobs)+"</div>";
+    html+=prontBtns()+"</div>";
+  }
+  if(prontSub==="plano"){
+    html+="<div class='card' style='margin-bottom:16px'><p class='ct'><i class='ti ti-"+(ed?"edit":"plus")+"'></i> "+(ed?"Editar":"Novo")+" Plano</p>";
+    html+="<div class='fr3' style='margin-bottom:10px'><div class='fi'><label>Data</label>"+prDate("pr-data",ed?prontEdit.data:"")+"</div></div>";
+    html+="<div class='fi' style='margin-bottom:10px'><label>Metas de curto prazo</label>"+prTxa("pr-curto",d.curto)+"</div>";
+    html+="<div class='fi' style='margin-bottom:10px'><label>Metas de médio prazo</label>"+prTxa("pr-medio",d.medio)+"</div>";
+    html+="<div class='fi' style='margin-bottom:10px'><label>Metas de longo prazo</label>"+prTxa("pr-longo",d.longo)+"</div>";
+    html+=prontBtns()+"</div>";
+  }
+  if(prontSub==="feedback"){
+    html+="<div class='card' style='margin-bottom:16px'><p class='ct'><i class='ti ti-"+(ed?"edit":"plus")+"'></i> "+(ed?"Editar":"Novo")+" Feedback</p>";
+    html+="<div class='fr3' style='margin-bottom:10px'><div class='fi'><label>Data</label>"+prDate("pr-data",ed?prontEdit.data:"")+"</div></div>";
+    html+="<div class='fi' style='margin-bottom:10px'><label>Feedback aos pais</label>"+prTxa("pr-fb",d.feedback)+"</div>";
+    html+=prontBtns()+"</div>";
+  }
+
+  html+="<div class='card'><p class='ct'><i class='ti ti-list'></i> Registros ("+recs.length+")</p>";
+  if(recs.length===0)html+="<p class='empty'>Nenhum registro ainda.</p>";
+  recs.forEach(function(r){
+    html+="<div class='card c0' style='margin-bottom:8px;border-left:4px solid var(--brand)'>";
+    html+="<div style='display:flex;justify-content:space-between;align-items:flex-start;gap:10px'>";
+    html+="<div style='flex:1'>"+prontResumo(r)+"</div>";
+    html+="<div style='display:flex;gap:6px'>";
+    html+="<button class='btn bsm' onclick='editarPront(\""+r.id+"\")'><i class='ti ti-edit'></i></button>";
+    html+="<button class='btn bd bsm' onclick='excluirPront(\""+r.id+"\")'><i class='ti ti-trash'></i></button>";
+    html+="</div></div></div>";
+  });
+  html+="</div></div>";
+  return html;
+}
+function prontBtns(){
+  var h="<div style='display:flex;gap:10px'><button class='btn bp' onclick='salvarPront()' style='flex:1'><i class='ti ti-check'></i> "+(prontEdit?"Salvar alterações":"Salvar")+"</button>";
+  if(prontEdit)h+="<button class='btn' onclick='prontEdit=null;prontFicha=\"motora\";refreshContent()'>Cancelar edição</button>";
+  return h+"</div><div id='pr-alert'></div>";
+}
+function fichaLabel(f){return f==="fisio"?"Fisioterapêutica":"Motora (GEDOIS)";}
+function prontResumo(r){
+  var d=prDados(r);
+  var h="<p style='font-weight:600;font-size:13px;margin:0 0 3px'>"+fd(r.data);
+  if(r.tipo==="avaliacoes")h+=" — "+prEsc(d.tipoav||"Avaliação")+" ("+fichaLabel(d.ficha)+")";
+  h+="</p>";
+  if(r.tipo==="evolucoes"){
+    if(d.objetivos)h+="<p style='font-size:11px;margin:2px 0'><b>Objetivos:</b> "+prEsc(d.objetivos)+"</p>";
+    if(d.exercicios)h+="<p style='font-size:11px;margin:2px 0'><b>Exercícios:</b> "+prEsc(d.exercicios)+"</p>";
+    if(d.evolucao)h+="<p style='font-size:11px;margin:2px 0'><b>Evolução:</b> "+prEsc(d.evolucao)+"</p>";
+    if(d.obs)h+="<p style='font-size:11px;margin:2px 0'><b>Obs:</b> "+prEsc(d.obs)+"</p>";
+  }
+  if(r.tipo==="avaliacoes"){
+    var n=0;Object.keys(d).forEach(function(k){if(k!=="tipoav"&&k!=="avobs"&&k!=="ficha"&&d[k])n++;});
+    h+="<p style='font-size:11px;color:var(--mt);margin:2px 0'>"+n+" item(ns) registrado(s)"+(d.avobs?" — Obs: "+prEsc(d.avobs):"")+"</p>";
+  }
+  if(r.tipo==="plano"){
+    if(d.curto)h+="<p style='font-size:11px;margin:2px 0'><b>Curto:</b> "+prEsc(d.curto)+"</p>";
+    if(d.medio)h+="<p style='font-size:11px;margin:2px 0'><b>Médio:</b> "+prEsc(d.medio)+"</p>";
+    if(d.longo)h+="<p style='font-size:11px;margin:2px 0'><b>Longo:</b> "+prEsc(d.longo)+"</p>";
+  }
+  if(r.tipo==="feedback"&&d.feedback)h+="<p style='font-size:11px;margin:2px 0'>"+prEsc(d.feedback)+"</p>";
+  return h;
+}
+function _prV(id){var el=document.getElementById(id);return el?el.value.trim():"";}
+async function salvarPront(){
+  if(!prontAluno){alert("Selecione um aluno.");return;}
+  if(!_umaVez("salvarPront"))return;
+  var data=_prV("pr-data");
+  if(!data){alert2("pr-alert","Informe a data.",false);return;}
+  var dados={};
+  if(prontSub==="evolucoes"){dados={objetivos:_prV("pr-obj"),exercicios:_prV("pr-exe"),evolucao:_prV("pr-evo"),obs:_prV("pr-obs")};}
+  else if(prontSub==="plano"){dados={curto:_prV("pr-curto"),medio:_prV("pr-medio"),longo:_prV("pr-longo")};}
+  else if(prontSub==="feedback"){dados={feedback:_prV("pr-fb")};}
+  else if(prontSub==="avaliacoes"){
+    dados={tipoav:_prV("pr-tipoav"),avobs:_prV("pr-avobs"),ficha:prontFicha};
+    if(prontFicha==="motora"){
+      AV_SECS.forEach(function(sec){sec.items.forEach(function(it){it.s.forEach(function(sb){
+        var v=_prV("pf_"+it.k+"_"+sb[0]);if(v)dados[it.k+"_"+sb[0]]=v;
+      });});});
+    }else{
+      FIS_SECS.forEach(function(sec){sec.rows.forEach(function(r){
+        var v=_prV("pf_"+r.k);if(v)dados[r.k]=v;
+      });});
+    }
+  }
+  if(prontEdit){
+    var reg=(D.pront||[]).find(function(x){return x.id===prontEdit.id;});
+    if(reg){reg.data=data;reg.dados=JSON.stringify(dados);}
+  }else{
+    D.pront.push({id:_novoId("pr"),aluno:prontAluno,tipo:prontSub,data:data,dados:JSON.stringify(dados)});
+  }
+  var ok=await _saveProntNow();
+  if(ok){prontEdit=null;prontFicha="motora";refreshContent();}
+  else{alert("Erro ao salvar no Google Sheets. Verifique se a aba \"prontuario\" existe na planilha.");}
+}
+function editarPront(id){
+  var r=(D.pront||[]).find(function(x){return x.id===id;});
+  if(!r)return;
+  prontEdit=r;prontSub=r.tipo;refreshContent();
+  setTimeout(function(){window.scrollTo(0,0);},50);
+}
+async function excluirPront(id){
+  if(!confirm("Excluir este registro do prontuário? Isso é permanente."))return;
+  var i=(D.pront||[]).findIndex(function(x){return x.id===id;});
+  if(i<0)return;
+  D.pront.splice(i,1);
+  var ok=await _saveProntNow();
+  if(ok){if(prontEdit&&prontEdit.id===id)prontEdit=null;refreshContent();}
+  else{alert("Erro ao excluir no Google Sheets.");}
+}
+
+// ---- Tela Relatórios Pedagógicos (a partir do Prontuário) ----
+function relatoriosPedagogicosHtml(){
+  if(!D.pront)D.pront=[];
+  var html="<div class='content'><div class='ct'><i class='ti ti-file-text'></i> Relatórios Pedagógicos</div>";
+  html+="<div class='card' style='margin-bottom:16px'>";
+  html+="<div class='fr3' style='margin-bottom:10px'>";
+  html+="<div class='fi'><label>Aluno</label><select id='rp-aluno' onchange='rpAluno=this.value;refreshContent()' style='font-size:13px;padding:9px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value=''>Selecione...</option>";
+  prontAlunosLista().forEach(function(a){html+="<option value=\""+a.nome.replace(/"/g,"&quot;")+"\""+(rpAluno===a.nome?" selected":"")+">"+a.nome+(a.st==="Cancelado"?" (Cancelado)":"")+"</option>";});
+  html+="</select></div>";
+  html+="<div class='fi'><label>Tipo de relatório</label><select id='rp-modo' onchange='rpModo=this.value;refreshContent()' style='font-size:13px;padding:9px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'>";
+  html+="<option value='completo'"+(rpModo==="completo"?" selected":"")+">Completo</option><option value='periodo'"+(rpModo==="periodo"?" selected":"")+">Por período</option></select></div>";
+  html+="</div>";
+  if(rpModo==="periodo"){
+    html+="<div class='fr3' style='margin-bottom:10px'>";
+    html+="<div class='fi'><label>De</label><input type='date' id='rp-ini' value='"+rpIni+"' onchange='rpIni=this.value;refreshContent()' style='font-size:13px;padding:9px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'></div>";
+    html+="<div class='fi'><label>Até</label><input type='date' id='rp-fim' value='"+rpFim+"' onchange='rpFim=this.value;refreshContent()' style='font-size:13px;padding:9px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'></div>";
+    html+="</div>";
+  }
+  html+="<button class='btn bp' onclick='gerarPDFPront()'"+(rpAluno?"":" disabled")+"><i class='ti ti-file-type-pdf'></i> Gerar PDF</button>";
+  html+="</div>";
+  if(!rpAluno)return html+"<div class='card'><p class='empty'><i class='ti ti-user-search'></i> Selecione um aluno.</p></div></div>";
+  html+="<div class='card'>"+relProntConteudo(rpAluno,false)+"</div></div>";
+  return html;
+}
+function relProntFiltra(aluno){
+  var recs=(D.pront||[]).filter(function(r){return r.aluno===aluno;});
+  if(rpModo==="periodo"){
+    recs=recs.filter(function(r){
+      if(rpIni&&String(r.data)<rpIni)return false;
+      if(rpFim&&String(r.data)>rpFim)return false;
+      return true;
+    });
+  }
+  return recs.sort(function(a,b){return String(a.data).localeCompare(String(b.data));});
+}
+function relProntAvalDet(d){
+  var h="<p style='font-size:11px;color:var(--mt,#888);margin-bottom:6px'><b>Ficha:</b> "+fichaLabel(d.ficha)+"</p>";
+  if(d.ficha==="fisio"){
+    FIS_SECS.forEach(function(sec){
+      var linhas="";
+      sec.rows.forEach(function(r){var v=d[r.k];if(v)linhas+="<tr><td style='font-weight:600'>"+r.t+"</td><td>"+prEsc(v)+"</td></tr>";});
+      if(linhas)h+="<p style='font-weight:700;font-size:12px;margin:10px 0 4px'>"+sec.sec+"</p><table style='width:100%;border-collapse:collapse;font-size:11px'><tbody>"+linhas+"</tbody></table>";
+    });
+  }else{
+    AV_SECS.forEach(function(sec){
+      var linhas="";
+      sec.items.forEach(function(it){
+        var vals=[];
+        it.s.forEach(function(sb){var v=d[it.k+"_"+sb[0]];if(v)vals.push((sb[1]?sb[1]+": ":"")+v);});
+        if(vals.length)linhas+="<tr><td style='font-weight:600'>"+it.t+"</td><td>"+vals.join(" &middot; ")+"</td></tr>";
+      });
+      if(linhas)h+="<p style='font-weight:700;font-size:12px;margin:10px 0 4px'>"+sec.sec+"</p><table style='width:100%;border-collapse:collapse;font-size:11px'><tbody>"+linhas+"</tbody></table>";
+    });
+  }
+  if(d.avobs)h+="<p style='font-size:11px;margin-top:6px'><b>Observações gerais:</b> "+prEsc(d.avobs)+"</p>";
+  return h;
+}
+function relProntConteudo(aluno,pdf){
+  var recs=relProntFiltra(aluno);
+  var tipos=[["evolucoes","Evoluções"],["avaliacoes","Avaliações"],["plano","Plano Terapêutico"],["feedback","Feedbacks aos Pais"]];
+  var h="";
+  if(recs.length===0)return "<p class='empty'>Nenhum registro no período/aluno selecionado.</p>";
+  tipos.forEach(function(tp){
+    var rr=recs.filter(function(r){return r.tipo===tp[0];});
+    if(rr.length===0)return;
+    h+="<h3 style='font-size:14px;margin:16px 0 8px;border-bottom:2px solid "+(pdf?"#0b1e35":"var(--brand)")+";padding-bottom:4px'>"+tp[1]+" ("+rr.length+")</h3>";
+    rr.forEach(function(r){
+      var d=prDados(r);
+      h+="<div style='border:1px solid "+(pdf?"#ddd":"var(--br)")+";border-radius:8px;padding:10px;margin-bottom:10px;page-break-inside:avoid'>";
+      h+="<p style='font-weight:700;font-size:12px;margin:0 0 6px'>"+fd(r.data)+(r.tipo==="avaliacoes"&&d.tipoav?" — "+prEsc(d.tipoav):"")+"</p>";
+      if(r.tipo==="evolucoes"){
+        if(d.objetivos)h+="<p style='font-size:11px;margin:3px 0'><b>Objetivos:</b> "+prEsc(d.objetivos)+"</p>";
+        if(d.exercicios)h+="<p style='font-size:11px;margin:3px 0'><b>Exercícios:</b> "+prEsc(d.exercicios)+"</p>";
+        if(d.evolucao)h+="<p style='font-size:11px;margin:3px 0'><b>Evolução observada:</b> "+prEsc(d.evolucao)+"</p>";
+        if(d.obs)h+="<p style='font-size:11px;margin:3px 0'><b>Observações:</b> "+prEsc(d.obs)+"</p>";
+      }else if(r.tipo==="avaliacoes"){
+        h+=relProntAvalDet(d);
+      }else if(r.tipo==="plano"){
+        if(d.curto)h+="<p style='font-size:11px;margin:3px 0'><b>Curto prazo:</b> "+prEsc(d.curto)+"</p>";
+        if(d.medio)h+="<p style='font-size:11px;margin:3px 0'><b>Médio prazo:</b> "+prEsc(d.medio)+"</p>";
+        if(d.longo)h+="<p style='font-size:11px;margin:3px 0'><b>Longo prazo:</b> "+prEsc(d.longo)+"</p>";
+      }else if(r.tipo==="feedback"){
+        if(d.feedback)h+="<p style='font-size:11px;margin:3px 0'>"+prEsc(d.feedback)+"</p>";
+      }
+      h+="</div>";
+    });
+  });
+  return h;
+}
+function gerarPDFPront(){
+  if(!rpAluno){alert("Selecione um aluno.");return;}
+  var hoje=new Date(),pad=function(n){return n<10?"0"+n:n;};
+  var ger=pad(hoje.getDate())+"/"+pad(hoje.getMonth()+1)+"/"+hoje.getFullYear();
+  var per=rpModo==="periodo"?("Período: "+(rpIni?fd(rpIni):"início")+" a "+(rpFim?fd(rpFim):"hoje")):"Relatório completo";
+  var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap' rel='stylesheet'><style>*{margin:0;padding:0;box-sizing:border-box;font-family:'Plus Jakarta Sans',sans-serif}body{background:#fff;color:#222;padding:32px;font-size:11px}@media print{body{padding:20px}@page{margin:16mm}}td{padding:4px 8px;border-bottom:1px solid #eee}h3{color:#0b1e35}</style></head><body>";
+  h+="<div style='border-bottom:3px solid #0b1e35;padding-bottom:14px;margin-bottom:18px;display:flex;justify-content:space-between'>";
+  h+="<div><div style='font-size:20px;font-weight:800;color:#0b1e35'>Prontuário — "+prEsc(rpAluno)+"</div><div style='font-size:12px;color:#555;margin-top:2px'>"+per+"</div></div>";
+  h+="<div style='text-align:right;font-size:10px;color:#888'><div>Gerado em: "+ger+"</div><div>Ge Dois Academia</div></div></div>";
+  h+=relProntConteudo(rpAluno,true);
+  h+="</body></html>";
+  var w=window.open("","_blank","width=900,height=700");if(!w){alert("Bloqueador de pop-up ativado.");return;}
+  w.document.write(h);w.document.close();w.focus();
+  setTimeout(function(){w.print();},1200);
+}
+// ===== FIM MÓDULO PRONTUÁRIO =====
+
 render();
 
 </script>
 </body>
 </html>
+
