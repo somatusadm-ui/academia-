@@ -219,6 +219,13 @@ input:disabled,select:disabled,textarea:disabled{opacity:.6;cursor:not-allowed}
   .card,.kpi{box-shadow:none;break-inside:avoid}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* Seção recolhível (ex.: "Já decidiram" em Experimentais) */
+details>summary{outline:none}
+details>summary::-webkit-details-marker{display:none}
+details>summary::marker{content:''}
+details>summary:after{content:'\25be';float:right;color:var(--mt);font-size:14px;transition:transform .2s ease}
+details[open]>summary:after{transform:rotate(180deg)}
+details>summary:hover{color:var(--brand)}
 </style>
 </head>
 <body>
@@ -2573,11 +2580,13 @@ function alunosExperimentaisHtml(){
     falta:"<span class='badge br2' style='margin-left:4px'><i class='ti ti-x'></i> Faltou</span>",
     "":"<span class='badge' style='margin-left:4px;background:var(--b2);color:var(--mt)'>Sem registro</span>"
   };
-  var rows=lista.map(function(a){
+  var mesesNomesE=["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  function mesLabel(m){var p=m.split("-");return mesesNomesE[+p[1]]+"/"+p[0];}
+  function linhaAluno(a,mesRef){
     var si=statusInfo[a.status];
     var nomeEsc=String(a.nome).replace(/'/g,"\\'").replace(/"/g,"&quot;");
     var fechInfo=a.status==="convertido"&&a.dataFechamento?"<div style='font-size:10px;color:var(--gn);margin-top:2px'>Fechou em "+fd(a.dataFechamento)+"</div>":"";
-    return "<tr>"
+    return "<tr class='exp-row' data-nome='"+String(a.nome).toLowerCase().replace(/'/g,"")+"' data-mes='"+mesRef+"'>"
       +"<td style='font-weight:600'>"+a.nome+"</td>"
       +"<td>"+fd(a.primeiraData)+(a.qtd>1?" &rarr; "+fd(a.ultimaData):"")+"</td>"
       +"<td>"+(a.qtd>1?"<span class='badge bb'><i class='ti ti-repeat'></i> "+a.qtd+"ª aulas</span>":"<span style='color:var(--mt);font-size:11px'>1ª aula</span>")+"</td>"
@@ -2588,13 +2597,53 @@ function alunosExperimentaisHtml(){
       +(a.presenca!=="falta"?"<button class='btn bsm' style='background:#D32F2F;color:#fff;border:none' onclick='marcarPresencaExp("+a.ultimoIdx+",\"falta\")'><i class='ti ti-x'></i> Falta</button>":"")
       +(a.status!=="convertido"?"<button class='btn bs bsm' onclick='converterExpComData("+a.ultimoIdx+")'><i class='ti ti-check'></i> Fechou</button>":"<button class='btn bsm' onclick='converterExpComData("+a.ultimoIdx+")'><i class='ti ti-edit'></i> Alterar data</button>")
       +(a.status==="pendente"?"<button class='btn bd bsm' onclick='convExp("+a.ultimoIdx+",false)'><i class='ti ti-x'></i> Não vai fechar</button>":"")
+      +(a.status==="naoConvertido"?"<button class='btn bsm' onclick='reabrirExp("+a.ultimoIdx+")'><i class='ti ti-arrow-back-up'></i> Reabrir</button>":"")
       +"<button class='btn bsm' onclick='novaAulaExpParaAluno(\""+nomeEsc+"\")'><i class='ti ti-plus'></i> Nova aula</button>"
       +"</td></tr>";
+  }
+  var pendentes=lista.filter(function(a){return a.status==="pendente";});
+  var decididos=lista.filter(function(a){return a.status!=="pendente";});
+  // Mês de referência de cada linha, p/ o filtro: pendentes usa a data da última aula;
+  // decididos usa a data de fechamento (o mesmo critério que os painéis usam).
+  var mesesDisponiveis={};
+  pendentes.forEach(function(a){if(a.ultimaData)mesesDisponiveis[a.ultimaData.substring(0,7)]=true;});
+  decididos.forEach(function(a){var m=(a.dataFechamento||a.ultimaData||"").substring(0,7);if(m)mesesDisponiveis[m]=true;});
+  var optsMesFiltro=Object.keys(mesesDisponiveis).sort().reverse().map(function(m){
+    return "<option value='"+m+"'>"+mesLabel(m)+"</option>";
   }).join("");
-  return "<div class='card'><p class='ct'><i class='ti ti-users'></i> Controle de alunos — experimental <span style='font-size:11px;font-weight:400;color:var(--mt)'>("+lista.length+")</span></p>"
-    +"<p style='font-size:11px;color:var(--mt);margin:-6px 0 12px'>Visão geral de todos os alunos que já fizeram experimental, de qualquer mês — marque presença e resultado por aqui. Ao marcar \"Fechou\", informe a data real do fechamento: é essa data que os pain\\u00e9is da Catarina e da Secretaria usam para contar o mês.</p>"
-    +"<div class='ox'><table><thead><tr><th>Nome</th><th>Data(s)</th><th>Sess\\u00f5es</th><th>Presença</th><th>Status</th><th>Ações</th></tr></thead><tbody>"+rows+"</tbody></table></div>"
+  var filtroBar="<div class='card' style='margin-bottom:16px'>"
+    +"<div class='fr' style='margin-bottom:0'>"
+    +"<div class='fi'><label>Buscar aluno</label><input type='text' id='expBusca' placeholder='Digite o nome...' oninput='filtrarExpTabelas()'></div>"
+    +"<div class='fi'><label>Filtrar por mês (última aula / fechamento)</label><select id='expFiltroMes' onchange='filtrarExpTabelas()'><option value=''>Todos os meses</option>"+optsMesFiltro+"</select></div>"
+    +"</div></div>";
+  var htmlPendentes="<div class='card'><p class='ct'><i class='ti ti-users'></i> Controle de alunos — experimental <span style='font-size:11px;font-weight:400;color:var(--mt)'>("+pendentes.length+" em aberto)</span></p>"
+    +"<p style='font-size:11px;color:var(--mt);margin:-6px 0 12px'>Alunos ainda sem decisão. Ao marcar \"Fechou\", informe a data real do fechamento: é essa data que os pain\\u00e9is da Catarina e da Secretaria usam para contar o mês. Ao marcar \"Não vai fechar\", o aluno vai para \"Já decidiram\", logo abaixo.</p>"
+    +(pendentes.length===0?"<p class='empty' style='padding:10px 0'>Nenhum aluno em aberto no momento.</p>"
+      :"<div class='ox'><table><thead><tr><th>Nome</th><th>Data(s)</th><th>Sess\\u00f5es</th><th>Presença</th><th>Status</th><th>Ações</th></tr></thead><tbody>"
+        +pendentes.map(function(a){return linhaAluno(a,(a.ultimaData||"").substring(0,7));}).join("")+"</tbody></table></div>")
     +"</div>";
+  var htmlDecididos=decididos.length===0?"":"<details style='margin-top:16px' class='card' id='expDecididosDetails'>"
+    +"<summary style='cursor:pointer;list-style:none' class='ct'><i class='ti ti-history'></i> Já decidiram <span style='font-size:11px;font-weight:400;color:var(--mt)'>("+decididos.length+") &mdash; clique para "+"expandir/recolher</span></summary>"
+    +"<p style='font-size:11px;color:var(--mt);margin:10px 0 12px'>Alunos que já fecharam ou disseram que não vão fechar. Mudou de ideia? Dá pra converter ou reabrir por aqui a qualquer momento. Use os filtros acima para achar alguém específico.</p>"
+    +"<div class='ox'><table><thead><tr><th>Nome</th><th>Data(s)</th><th>Sess\\u00f5es</th><th>Presença</th><th>Status</th><th>Ações</th></tr></thead><tbody>"
+      +decididos.map(function(a){return linhaAluno(a,(a.dataFechamento||a.ultimaData||"").substring(0,7));}).join("")+"</tbody></table></div>"
+    +"</details>";
+  return filtroBar+htmlPendentes+htmlDecididos;
+}
+// Filtro por nome/mês nas tabelas de experimentais — pura manipulação de DOM (não recarrega
+// a tela), então o campo de busca não perde o foco enquanto a usuária digita.
+function filtrarExpTabelas(){
+  var buscaEl=document.getElementById("expBusca");
+  var mesEl=document.getElementById("expFiltroMes");
+  var busca=(buscaEl?buscaEl.value:"").trim().toLowerCase();
+  var mes=mesEl?mesEl.value:"";
+  document.querySelectorAll(".exp-row").forEach(function(tr){
+    var nome=tr.getAttribute("data-nome")||"";
+    var mesRow=tr.getAttribute("data-mes")||"";
+    var okNome=!busca||nome.indexOf(busca)>=0;
+    var okMes=!mes||mesRow===mes;
+    tr.style.display=(okNome&&okMes)?"":"none";
+  });
 }
 function novaAulaExpParaAluno(nome){
   var campo=document.getElementById("en");
@@ -2684,6 +2733,18 @@ async function convExp(i,conv,dataFech){
   if(!D.exp[i])return;
   D.exp[i].convertido=conv;D.exp[i].naoConvertido=!conv;
   D.exp[i].dataFechamento=conv?(dataFech||D.exp[i].dataFechamento||fdISO(new Date())):"";
+  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento"];
+  var rows=D.exp.map(function(e){return h.map(function(k){return String(e[k]||"");});});
+  dbSave("exp",function(){rewriteAba("experimentais",h,rows);});
+  refreshContent();
+}
+// Volta um aluno marcado como "não vai fechar" para o estado "em aberto" (pendente),
+// caso tenha sido um engano ou o aluno tenha voltado a demonstrar interesse.
+async function reabrirExp(i){
+  if(!D.exp[i])return;
+  D.exp[i].convertido=false;
+  D.exp[i].naoConvertido=false;
+  D.exp[i].dataFechamento="";
   var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento"];
   var rows=D.exp.map(function(e){return h.map(function(k){return String(e[k]||"");});});
   dbSave("exp",function(){rewriteAba("experimentais",h,rows);});
