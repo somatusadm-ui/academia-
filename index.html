@@ -62,6 +62,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .img-widget-head{background:linear-gradient(135deg,#D32F2F 0%,#FF7A3D 100%);color:#fff;border-radius:14px 14px 0 0;padding:12px 16px;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;box-shadow:0 4px 14px rgba(211,47,47,.18)}
 .img-widget-body{border:1px solid var(--br);border-top:none;border-radius:0 0 14px 14px;padding:14px 16px;background:var(--b1)}
 .img-chip{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:20px;font-size:11.5px;font-weight:700;background:#FFF3E0;color:#A32D2D;border:1px solid #FFD8A8}
+.profile-header{background:linear-gradient(135deg,var(--brand) 0%,var(--brand2) 100%);border-radius:14px;padding:18px 20px;color:#fff;margin-bottom:16px;display:flex;align-items:center;gap:14px;position:relative;overflow:hidden}
+.profile-header.is-canc{background:linear-gradient(135deg,#8a8f98 0%,#a7adb8 100%)}
+.profile-header:before{content:'';position:absolute;right:-30px;top:-45px;width:130px;height:130px;border-radius:50%;background:rgba(255,255,255,.08)}
+.profile-header:after{content:'';position:absolute;right:40px;bottom:-55px;width:90px;height:90px;border-radius:50%;background:rgba(255,255,255,.06)}
+.profile-avatar-lg{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;color:#fff;flex-shrink:0;position:relative;z-index:1;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+.profile-header-name{font-size:17px;font-weight:800;margin:0;letter-spacing:-.2px;position:relative;z-index:1}
+.profile-badge{background:rgba(255,255,255,.22)!important;color:#fff!important;border:1px solid rgba(255,255,255,.32)}
+.mini-stat{background:var(--b1);border:1px solid var(--br);border-radius:10px;padding:10px 12px;box-shadow:0 2px 6px rgba(20,50,70,.04)}
+.mini-stat-label{font-size:10px;color:var(--mt);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.mini-stat-value{font-size:13px;font-weight:800;color:var(--tx)}
+.month-status-card{border-radius:14px;padding:16px 18px;margin-bottom:14px;position:relative;overflow:hidden;border:1px solid var(--br)}
+.month-status-label{font-size:11px;font-weight:700;color:var(--mt);letter-spacing:.06em;text-transform:uppercase;margin-bottom:12px}
+.timeline-item{border-left:3px solid var(--br);padding:4px 0 12px 14px;margin-left:4px;position:relative}
+.timeline-item:before{content:'';position:absolute;left:-6px;top:6px;width:9px;height:9px;border-radius:50%;background:var(--brand2)}
+.timeline-item.tl-red{border-left-color:#FFCDD2}.timeline-item.tl-red:before{background:var(--rd)}
+.timeline-item.tl-blue{border-left-color:#B2DFDB}.timeline-item.tl-blue:before{background:var(--tl)}
+.timeline-item.tl-teal{border-left-color:var(--tll)}.timeline-item.tl-teal:before{background:var(--brand2)}
+.timeline-item:last-child{border-left-color:transparent}
 .kpi{background:var(--b1);border:1px solid var(--br);border-radius:var(--r);padding:16px 18px;position:relative;overflow:hidden;box-shadow:0 3px 10px rgba(20,50,70,.05);transition:all .25s ease}
 .kpi:hover{box-shadow:0 8px 22px rgba(20,50,70,.09);transform:translateY(-2px)}
 .ka{position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:4px 0 0 4px}
@@ -4258,9 +4276,9 @@ function abrirPerfilAluno(nome){
   var fbRows=feedbacks.length===0
     ?"<p class='empty' style='padding:1.5rem'>Nenhum feedback registrado.</p>"
     :feedbacks.map(function(f){
-        return "<div style='padding:10px 0;border-bottom:1px solid var(--br)'>"
+        return "<div class='timeline-item "+(f.prof==="Amanda"?"tl-teal":"tl-blue")+"'>"
           +"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:4px'>"
-          +"<span style='font-size:12px;font-weight:600'>"+fd(f.data)+"</span>"
+          +"<span style='font-size:12px;font-weight:700'>"+fd(f.data)+"</span>"
           +"<span class='badge "+(f.prof==="Amanda"?"bb":"bpu")+"'>"+f.prof+"</span>"
           +"</div>"
           +"<p style='font-size:12px;color:var(--mt);margin:0'>"+f.texto+"</p></div>";
@@ -4272,7 +4290,7 @@ function abrirPerfilAluno(nome){
     :hist.map(function(h){
       var isCancelado=String(h.evento||"")==="cancelado";
       var isMatricula=h.evento==="matricula";
-      return "<div style='padding:10px 0;border-bottom:1px solid var(--br)'>"
+      return "<div class='timeline-item "+(isCancelado?"tl-red":isMatricula?"tl-teal":"")+"'>"
         +"<div style='display:flex;align-items:center;gap:8px;margin-bottom:6px'>"
         +"<span class='badge "+(isCancelado?"br2":isMatricula?"btl":"bb")+"'>"
         +(isCancelado?"<i class='ti ti-x'></i> Cancelado":isMatricula?"<i class='ti ti-user-plus'></i> 1ª Matrícula":"<i class='ti ti-repeat'></i> Renovação")
@@ -4296,11 +4314,13 @@ function abrirPerfilAluno(nome){
   if(pagAtual){statusAtual="pago";}
   else if(caixaAtual){statusAtual=(caixaAtual.dataVenc<hoje)?"atrasado":"pendente";if(statusAtual==="atrasado"){diasAtrasado=Math.floor((new Date()-new Date(caixaAtual.dataVenc+"T00:00:00"))/(1000*60*60*24));}}
   else{statusAtual="seminfo";}
-  var dashPag="<div style='background:var(--b2);border-radius:var(--rs);padding:16px;margin-bottom:14px'>"
-    +"<p style='font-size:12px;font-weight:700;color:var(--mt);letter-spacing:.05em;text-transform:uppercase;margin-bottom:12px'>Mês Atual</p>"
+  var statusCor=statusAtual==="pago"?"var(--gn)":statusAtual==="atrasado"?"var(--rd)":statusAtual==="pendente"?"var(--am)":"var(--mt)";
+  var statusBg=statusAtual==="pago"?"var(--gl)":statusAtual==="atrasado"?"var(--rl)":statusAtual==="pendente"?"var(--al)":"var(--b2)";
+  var dashPag="<div class='month-status-card' style='background:"+statusBg+";border-left:4px solid "+statusCor+"'>"
+    +"<p class='month-status-label'>Mês Atual</p>"
     +"<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px'>"
-    +"<div style='text-align:center'><p style='font-size:11px;color:var(--mt);margin:0 0 4px'>Valor</p><p style='font-size:16px;font-weight:700;margin:0'>"+BRL(a.valor)+"</p></div>"
-    +"<div style='text-align:center'><p style='font-size:11px;color:var(--mt);margin:0 0 4px'>Vencimento</p><p style='font-size:16px;font-weight:700;margin:0'>"+(caixaAtual?"Dia "+caixaAtual.dataVenc.slice(-2):"Dia "+a.diaVenc)+"</p></div>"
+    +"<div style='text-align:center'><p style='font-size:11px;color:var(--mt);margin:0 0 4px'>Valor</p><p style='font-size:17px;font-weight:800;margin:0'>"+BRL(a.valor)+"</p></div>"
+    +"<div style='text-align:center'><p style='font-size:11px;color:var(--mt);margin:0 0 4px'>Vencimento</p><p style='font-size:17px;font-weight:800;margin:0'>"+(caixaAtual?"Dia "+caixaAtual.dataVenc.slice(-2):"Dia "+a.diaVenc)+"</p></div>"
     +"<div style='text-align:center'><p style='font-size:11px;color:var(--mt);margin:0 0 4px'>Status</p>"
     +(statusAtual==="pago"?"<span class='badge bg'><i class='ti ti-check'></i> Pago em "+fd(pagAtual.data)+"</span>"
      :statusAtual==="atrasado"?"<span class='badge br2'><i class='ti ti-alert-circle'></i> "+diasAtrasado+" dia"+(diasAtrasado===1?"":"s")+" atrasado</span>"
@@ -4308,7 +4328,7 @@ function abrirPerfilAluno(nome){
      :"<span class='badge' style='background:var(--b3);color:var(--mt)'>Sem info</span>")
     +"</div>"
     +"</div>"
-    +(pagAtual?"<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px'>"
+    +(pagAtual?"<div class='dv' style='margin:10px 0'></div><div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px'>"
       +"<div><span style='color:var(--mt)'>Bruto:</span> <strong>"+BRL(pagAtual.bruto)+"</strong></div>"
       +"<div><span style='color:var(--mt)'>Líquido:</span> <strong>"+BRL(pagAtual.liquido)+"</strong></div>"
       +"<div><span style='color:var(--mt)'>Forma:</span> <strong>"+(pagAtual.forma||"—")+"</strong></div>"
@@ -4329,17 +4349,17 @@ function abrirPerfilAluno(nome){
   var avatarLetras=nome.split(" ").slice(0,2).map(function(w){return w[0];}).join("");
   var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\">"
     +"<div class='modal' style='width:680px;max-width:96vw'>"
-    +"<div style='display:flex;align-items:center;gap:14px;margin-bottom:16px'>"
-    +"<div style='width:46px;height:46px;border-radius:50%;background:var(--bl);color:var(--brand);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;flex-shrink:0'>"+avatarLetras+"</div>"
-    +"<div style='flex:1'>"
-    +"<p style='font-size:16px;font-weight:700;margin:0;color:var(--tx)'>"+nome.split(" ").slice(0,3).join(" ")+"</p>"
-    +"<div style='display:flex;gap:6px;margin-top:4px;flex-wrap:wrap'>"
-    +"<span class='badge bb'>"+a.plano+"</span>"
-    +"<span class='badge' style='background:var(--b2);color:var(--mt)'>Nº "+a.numero+"</span>"
-    +(isCan?"<span class='badge br2'>Cancelado</span>":"")
+    +"<div class='profile-header"+(isCan?" is-canc":"")+"'>"
+    +"<div class='profile-avatar-lg'>"+avatarLetras+"</div>"
+    +"<div style='flex:1;position:relative;z-index:1'>"
+    +"<p class='profile-header-name'>"+nome.split(" ").slice(0,3).join(" ")+"</p>"
+    +"<div style='display:flex;gap:6px;margin-top:6px;flex-wrap:wrap'>"
+    +"<span class='badge profile-badge'>"+a.plano+"</span>"
+    +"<span class='badge profile-badge'>Nº "+a.numero+"</span>"
+    +(isCan?"<span class='badge profile-badge'><i class='ti ti-x'></i> Cancelado</span>":"")
     +"</div></div>"
-    +(isProf?"":"<button class='btn' onclick=\"goTab('matriculas');closeModal();\" style='font-size:12px'><i class='ti ti-edit'></i> Editar matrícula</button>")
-    +"<button class='btn bsm' onclick='closeModal()' style='padding:8px'><i class='ti ti-x'></i></button>"
+    +(isProf?"":"<button class='btn' onclick=\"goTab('matriculas');closeModal();\" style='font-size:12px;position:relative;z-index:1;background:rgba(255,255,255,.16);color:#fff;border-color:rgba(255,255,255,.3)'><i class='ti ti-edit'></i> Editar matrícula</button>")
+    +"<button class='btn bsm' onclick='closeModal()' style='padding:8px;position:relative;z-index:1;background:rgba(255,255,255,.16);color:#fff;border-color:rgba(255,255,255,.3)'><i class='ti ti-x'></i></button>"
     +"</div>"
     +"<div class='tabs'>"
     +"<button class='tab active' id='ptab1' onclick='switchPTab(1)'>Dados Pessoais</button>"
@@ -4364,14 +4384,14 @@ function abrirPerfilAluno(nome){
     +"<div class='fi' style='margin-bottom:12px;max-width:260px'><label>Data da aula experimental</label><input type='date' id='pfExp' value='"+(perfil.dataExperimental||"")+"'></div>"
     +"<div class='fi' style='margin-bottom:12px'><label>Observações</label><textarea id='pfObs' rows='2' style='resize:vertical' placeholder='Informações adicionais...'>"+(perfil.obs||"")+"</textarea></div>"
     +"<div class='dv'></div>"
-    +"<p style='font-size:13px;font-weight:600;margin:10px 0 8px'>Dados da matrícula</p>"
+    +"<p style='font-size:13px;font-weight:700;margin:10px 0 10px'>Dados da matrícula</p>"
     +"<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:12px;margin-bottom:12px'>"
-    +"<div style='background:var(--b2);border-radius:var(--rs);padding:10px'><span style='color:var(--mt)'>Matrícula</span><br><strong>"+fd(a.dataMatricula)+"</strong></div>"
-    +"<div style='background:var(--b2);border-radius:var(--rs);padding:10px'><span style='color:var(--mt)'>Plano</span><br><strong>"+a.plano+"</strong></div>"
-    +(isProf?"":"<div style='background:var(--b2);border-radius:var(--rs);padding:10px'><span style='color:var(--mt)'>Valor</span><br><strong>"+BRL(a.valor)+"</strong></div>"
-    +"<div style='background:var(--b2);border-radius:var(--rs);padding:10px'><span style='color:var(--mt)'>Dia venc.</span><br><strong>Dia "+a.diaVenc+"</strong></div>")
-    +"<div style='background:var(--b2);border-radius:var(--rs);padding:10px'><span style='color:var(--mt)'>Professora</span><br><strong>"+a.prof+"</strong></div>"
-    +"<div style='background:var(--b2);border-radius:var(--rs);padding:10px'><span style='color:var(--mt)'>Dias aula</span><br><strong>"+(a.diasSem||"—")+"</strong></div>"
+    +"<div class='mini-stat'><p class='mini-stat-label'>Matrícula</p><p class='mini-stat-value'>"+fd(a.dataMatricula)+"</p></div>"
+    +"<div class='mini-stat'><p class='mini-stat-label'>Plano</p><p class='mini-stat-value'>"+a.plano+"</p></div>"
+    +(isProf?"":"<div class='mini-stat'><p class='mini-stat-label'>Valor</p><p class='mini-stat-value'>"+BRL(a.valor)+"</p></div>"
+    +"<div class='mini-stat'><p class='mini-stat-label'>Dia venc.</p><p class='mini-stat-value'>Dia "+a.diaVenc+"</p></div>")
+    +"<div class='mini-stat'><p class='mini-stat-label'>Professora</p><p class='mini-stat-value'>"+a.prof+"</p></div>"
+    +"<div class='mini-stat'><p class='mini-stat-label'>Dias aula</p><p class='mini-stat-value'>"+(a.diasSem||"—")+"</p></div>"
     +"</div>"
     +"<div id='pfMsg'></div>"
     +"<button class='btn bp bf' onclick=\"salvarPerfil('"+nome.replace(/'/g,"\\'")+"')\"><i class='ti ti-check'></i> Salvar dados pessoais</button>"
