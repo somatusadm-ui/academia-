@@ -212,20 +212,50 @@ function todosObj(){
   return lista;
 }
 function ativos(){return todosObj().filter(function(a){return!eCanc(a.nome);});}
+// Retorna, para cada aluno, o evento mais antigo registrado no histórico (por data).
+// Isso representa a matrícula ORIGINAL de verdade, mesmo que o campo dataMatricula
+// do cadastro já tenha sido sobrescrito por uma renovação posterior.
+function _primeiroEventoPorAluno(){
+  var primeiro={};
+  (D.historico||[]).forEach(function(h){
+    if(!h.dataEvento)return;
+    if(!primeiro[h.nome]||h.dataEvento<primeiro[h.nome].dataEvento)primeiro[h.nome]=h;
+  });
+  return primeiro;
+}
 function ativosNoMes(pfxAnoMes){
   // pfxAnoMes = "YYYY-MM"
+  // Importante: NÃO usa ativos() (que reflete só o estado ATUAL). Aqui reconstruímos quem estava
+  // realmente matriculado naquele mês específico, considerando a data de cancelamento (se houver).
+  // Assim, um aluno cancelado em julho continua aparecendo como matriculado nos relatórios de junho,
+  // e um aluno que renovou continua contando desde a matrícula ORIGINAL (não a data da renovação).
   var partes=pfxAnoMes.split("-"),ano=+partes[0],mes=+partes[1];
   var ultimoDia=new Date(ano,mes,0); // ultimo dia do mes
-  return ativos().filter(function(a){
-    if(!a.dataMatricula)return true;
-    return new Date(a.dataMatricula+"T00:00:00")<=ultimoDia;
+  var primeiros=_primeiroEventoPorAluno();
+  return todosObj().filter(function(a){
+    var dataOriginal=(primeiros[a.nome]&&primeiros[a.nome].dataEvento)||a.dataMatricula;
+    if(dataOriginal){
+      if(new Date(dataOriginal+"T00:00:00")>ultimoDia)return false; // matriculou depois desse mês
+    }
+    var cancInfo=(D.canc||[]).find(function(c){return c.nome===a.nome&&(c.ativo===true||String(c.ativo).toLowerCase()==="true");});
+    if(cancInfo&&cancInfo.data){
+      var dataCanc=new Date(cancInfo.data+"T00:00:00");
+      if(dataCanc<=ultimoDia)return false; // já tinha cancelado até o fim desse mês
+    }
+    return true;
   });
 }
 function cancelados(){return todosObj().filter(function(a){return eCanc(a.nome);});}
 function _movimentacoesMes(anoMes){
   // anoMes = "YYYY-MM". Baseado nos eventos registrados em D.historico (aba Matrículas).
   var pfx=anoMes+"-";
-  var novasLista=(D.historico||[]).filter(function(h){return h.evento==="matricula"&&h.dataEvento&&h.dataEvento.startsWith(pfx);});
+  var primeiros=_primeiroEventoPorAluno();
+  // "Novas" só conta um evento "matricula" se ele for REALMENTE o primeiro evento desse aluno.
+  // Isso evita que uma renovação seja contabilizada como matrícula nova (ex: quando o histórico
+  // precisou ser reconstruído e criou um registro de apoio).
+  var novasLista=(D.historico||[]).filter(function(h){
+    return h.evento==="matricula"&&h.dataEvento&&h.dataEvento.startsWith(pfx)&&primeiros[h.nome]===h;
+  });
   var renovadasLista=(D.historico||[]).filter(function(h){return h.evento==="renovacao"&&h.dataEvento&&h.dataEvento.startsWith(pfx);});
   // Cancelamentos: usa D.canc como fonte principal (é a mesma fonte que mostra "Cancelado em" nas telas),
   // já que o histórico pode não ter o evento registrado em casos antigos. Enriquecido com dados do
@@ -627,6 +657,7 @@ var abas=[
   if(!D.pront)D.pront=[];
   var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento"];
   var todosList=todosObj();
+  var _precisaSalvarHistBackfill=false;
   for(var i=0;i<todosList.length;i++){
     var a=todosList[i];
     // Nao criar se ja existe QUALQUER registro de matricula/renovacao (evita fabricar "1a matricula" com a data da renovacao)
@@ -637,8 +668,14 @@ var abas=[
         vencimento:calcVencContrato(a.dataMatricula,a.plano)||"",
         evento:"matricula",dataEvento:a.dataMatricula};
       D.historico.push(hObj);
+      _precisaSalvarHistBackfill=true;
     }
   }
+  // IMPORTANTE: persistir imediatamente. Sem isso, esse preenchimento automático ficava só na
+  // memória e era refeito a CADA recarregamento — se o aluno já tivesse renovado nesse meio tempo,
+  // o "dataMatricula" usado aqui já estaria sobrescrito pela data da renovação, fazendo a renovação
+  // ser contabilizada como matrícula nova toda vez que a página recarregasse.
+  if(_precisaSalvarHistBackfill&&_abaOk["historico"]===true)await saveHistoricoAll();
   // Dedup: remove pagamentos com o MESMO id (só pode existir 1 de cada)
   var _vistos={};
   D.pag=D.pag.filter(function(p){
@@ -1344,6 +1381,7 @@ function matHtml(){
         +"<td><span class='badge br2' style='font-size:10px'>"+(cancInfo&&cancInfo.data?fd(cancInfo.data):"—")+"</span></td>"
         +"<td style='display:flex;gap:4px'>"
         +"<button class='btn bsm' style='background:var(--bl);color:var(--brand2);border-color:var(--bl)' data-n='"+a.nome+"' onclick=\"editarMatricula(this.dataset.n)\"><i class='ti ti-user'></i> Perfil</button>"
+        +"<button class='btn bsm' style='background:var(--al);color:var(--am);border-color:var(--al)' data-n='"+a.nome+"' onclick=\"editarCancelamento(this.dataset.n)\" title='Editar data de cancelamento'><i class='ti ti-calendar-x'></i></button>"
         +"<button class='btn bs bsm' data-n='"+a.nome+"' onclick='rematricularAluno(this.dataset.n)'><i class='ti ti-refresh'></i> Rematricular</button>"
         +(!a.fixo?"<button class='btn bd bsm' data-n='"+a.nome+"' onclick='confirmarExclusao(this.dataset.n)'><i class='ti ti-trash'></i></button>":"")
         +"</td></tr>";
@@ -1633,6 +1671,10 @@ async function salvarEdicaoHistorico(idx,nome){
   h.plano=document.getElementById("hepl").value;
   h.valor=+document.getElementById("hev").value||h.valor;
   h.dataRenovacao=document.getElementById("hedr").value;
+  // IMPORTANTE: dataEvento é o campo que os Relatórios usam pra decidir em qual mês contar o evento.
+  // Sem atualizar aqui, corrigir a data na tela não refletia no relatório.
+  if(h.evento==="renovacao")h.dataEvento=h.dataRenovacao||h.dataMatricula||h.dataEvento;
+  else if(h.evento==="matricula")h.dataEvento=h.dataMatricula||h.dataEvento;
   await saveHistoricoAll();
   editarMatricula(nome);
 }
@@ -1695,9 +1737,10 @@ async function salvarFeedback(nome){
   await push("feedbacks",h,h.map(function(k){return obj[k]||"";}));
   closeModal();editarMatricula(nome);
 }
-function excluirFeedback(idx,nome){
+async function excluirFeedback(idx,nome){
   if(!confirm("Excluir este feedback?"))return;
   if(idx>=0&&idx<D.feedbacks.length)D.feedbacks.splice(idx,1);
+  await saveFeedbacksAll();
   editarMatricula(nome);
 }
 async function saveMat(){
@@ -1709,18 +1752,14 @@ async function saveMat(){
   if(!valor){alert2("ma","Preencha o valor.",false);return;}
   var obj={nome:nome,numero:document.getElementById("mnu").value,data:data,plano:plano,valor:valor,diaVenc:dv,diasSem:document.getElementById("mds").value,horario:document.getElementById("mh").value,prof:document.getElementById("mpr").value,canal:document.getElementById("mc2").value,desconto:desconto,promocao:promocao,dataMatricula:data};
   D.mat.push(obj);
+  D.caixa=gerarCaixa();
+  ensureCaixaMes();
   // Registrar 1ª matrícula no histórico
   if(!D.historico)D.historico=[];
   var hObj={nome:nome,plano:plano,valor:valor,diaVenc:dv,prof:obj.prof,dataMatricula:data,dataRenovacao:"",vencimento:calcVencContrato(data,plano)||"",evento:"matricula",dataEvento:data};
   D.historico.push(hObj);
   var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento"];
-  await fetch(SURL,{
-    method:"POST",
-    headers:{"Content-Type":"text/plain;charset=utf-8"},
-    body:JSON.stringify({aba:"historico",headers:hh,row:hh.map(function(k){return String(hObj[k]||"");})})
-  });
-  D.caixa=gerarCaixa();
-  ensureCaixaMes();
+  await push("historico",hh,hh.map(function(k){return String(hObj[k]||"");}));
   await saveMatriculas();
   await saveCaixa();
   alert2("ma","Matrícula registrada! Adicionado ao caixa.",true);
@@ -1755,6 +1794,43 @@ async function rematricularAluno(nome){
   await saveCancelados();
   await saveCaixa();
   alert(nome.split(" ")[0]+" rematriculado!");refreshContent();
+}
+function editarCancelamento(nome){
+  var c=(D.canc||[]).find(function(x){return x.nome===nome;});
+  if(!c)return;
+  var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\">"
+    +"<div class='modal'>"
+    +"<p class='modal-title'><i class='ti ti-calendar-x' style='color:var(--rd)'></i> Editar data de cancelamento &mdash; "+nome.split(" ").slice(0,2).join(" ")+"</p>"
+    +"<div class='fi' style='margin-bottom:14px'><label>Dia em que a matr\u00edcula foi cancelada</label><input type='date' id='eccData' value='"+(c.data||"")+"'></div>"
+    +"<p style='font-size:11px;color:var(--mt);margin-bottom:12px'><i class='ti ti-info-circle'></i> Essa data define em qual m\u00eas o cancelamento aparece na aba Relat\u00f3rios.</p>"
+    +"<div style='display:flex;gap:8px'>"
+    +"<button class='btn bp' style='flex:1;justify-content:center' onclick=\"salvarEdicaoCancelamento('"+nome.replace(/'/g,"\\'")+"')\">"
+    +"<i class='ti ti-check'></i> Salvar</button>"
+    +"<button class='btn' onclick=\"editarMatricula('"+nome.replace(/'/g,"\\'")+"')\">Cancelar</button></div>"
+    +"</div></div>";
+  document.getElementById("mc").innerHTML=html;
+}
+async function salvarEdicaoCancelamento(nome){
+  var novaData=document.getElementById("eccData").value;
+  if(!novaData){alert("Selecione uma data.");return;}
+  var idx=(D.canc||[]).findIndex(function(c){return c.nome===nome;});
+  if(idx<0)return;
+  var dataAntiga=D.canc[idx].data;
+  D.canc[idx].data=novaData;
+  await saveCancelados();
+  // Atualiza também o(s) evento(s) "cancelado" correspondente(s) no histórico, para o relatório
+  // do mês certo refletir a nova data.
+  if(D.historico&&D.historico.length){
+    var atualizou=false;
+    D.historico.forEach(function(h){
+      if(h.nome===nome&&h.evento==="cancelado"&&(h.dataEvento===dataAntiga||!h.dataEvento)){
+        h.dataEvento=novaData;
+        atualizou=true;
+      }
+    });
+    if(atualizou)await saveHistoricoAll();
+  }
+  closeModal();refreshContent();alert(nome.split(" ")[0]+": data de cancelamento atualizada!");
 }
 function renovarMatricula(nome){
   var d=getDados(nome);if(!d)return;
@@ -1827,6 +1903,11 @@ async function confirmarRenovacao(nome){
   await saveCaixa();
   closeModal();refreshContent();alert(nome.split(" ")[0]+" renovado com sucesso!");
 }
+async function saveFeedbacksAll(){
+  var h=["aluno","data","prof","texto"];
+  var rows=(D.feedbacks||[]).map(function(f){return h.map(function(k){return String(f[k]||"");});});
+  await rewriteAba("feedbacks",h,rows);
+}
 async function confirmarExclusao(nome){
   if(!confirm("EXCLUIR DEFINITIVAMENTE "+nome.split(" ")[0]+"?"))return;
   if(!confirm("Confirma? Histórico também será removido."))return;
@@ -1836,11 +1917,16 @@ async function confirmarExclusao(nome){
   D.pag=D.pag.filter(function(p){return p.aluno!==nome;});
   D.caixa=D.caixa.filter(function(c){return c.nome!==nome;});
   D.canc=(D.canc||[]).filter(function(c){return c.nome!==nome;});
+  D.historico=(D.historico||[]).filter(function(h){return h.nome!==nome;});
+  D.perfis=(D.perfis||[]).filter(function(p){return p.nome!==nome;});
   if(D.feedbacks)D.feedbacks=D.feedbacks.filter(function(f){return f.aluno!==nome;});
   await saveMatriculas();
   await savePagamentos();
   await saveCancelados();
   await saveCaixa();
+  await saveHistoricoAll(); // remove definitivamente os registros do histórico (evita reaparecer nos relatórios)
+  await savePerfis();
+  await saveFeedbacksAll();
   refreshContent();
 }
 // ===== CONTRATOS =====
@@ -3981,7 +4067,10 @@ function alunosHtml(){
     var cancInfo=(D.canc||[]).find(function(c){return c.nome===a.nome;});
     return "<div style='background:var(--b1);border:1px solid var(--br);border-radius:var(--rs);padding:12px;cursor:pointer;opacity:.7'"
       +" onclick=\"abrirPerfilAluno('"+a.nome.replace(/'/g,"\\'")+"')\">"
+      +"<div style='display:flex;justify-content:space-between;align-items:flex-start;gap:6px'>"
       +"<p style='font-size:12px;font-weight:700;color:var(--tx);margin:0 0 4px'>"+a.nome.split(" ").slice(0,3).join(" ")+"</p>"
+      +(isProf?"":"<button class='btn bsm' style='padding:3px 6px;background:var(--al);color:var(--am);border-color:var(--al);flex-shrink:0' onclick=\"event.stopPropagation();editarCancelamento('"+a.nome.replace(/'/g,"\\'")+"')\" title='Editar data de cancelamento'><i class='ti ti-calendar-x'></i></button>")
+      +"</div>"
       +"<div style='display:flex;gap:6px;align-items:center;flex-wrap:wrap'>"
       +"<span class='badge br2' style='font-size:10px'>Cancelado"+(cancInfo&&cancInfo.data?" em "+fd(cancInfo.data):"")+"</span>"
       +"<span class='badge bb' style='font-size:10px'>"+a.plano+"</span>"
