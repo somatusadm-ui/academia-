@@ -138,6 +138,9 @@ async function sha256hex(s){var b=await crypto.subtle.digest("SHA-256",new TextE
 var TAXA={PIX:0,Boleto:1.89,"PIX Boleto":1.25,Dinheiro:0};
 var DIAS=["Domingo","Segunda","Terca","Quarta","Quinta","Sexta","Sabado","Segunda e Quarta","Terca e Quinta","Segunda, Quarta e Sexta","Terca, Quinta e Sabado"];
 var HORAS=["06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
+// NOTA: AF é usado apenas como semente de migração para o Sheets na primeira sincronização
+// (ver syncAll). Depois de migrado, os dados reais passam a viver 100% na aba "matriculas"
+// do Google Sheets — edições, cancelamentos e exclusões passam a persistir corretamente.
 var AF=[
 {nome:"NICOLAS YUZO ARITA NAKAIRA",numero:"000009",plano:"Semestral",valor:500,diaVenc:15,diasSem:"Quarta",horario:"",prof:"Amanda",dataMatricula:"2026-01-19"},
 {nome:"PEDRO SANTOS DIAS",numero:"000050",plano:"Trimestral",valor:459,diaVenc:10,diasSem:"Quarta",horario:"",prof:"Amanda",dataMatricula:"2026-05-15"},
@@ -151,18 +154,7 @@ var AF=[
 {nome:"LUCIANO AUGUSTO FERNANDES NETTO",numero:"000026",plano:"Semestral",valor:500,diaVenc:15,diasSem:"Quarta",horario:"",prof:"Amanda",dataMatricula:"2026-05-01"},
 {nome:"HENRIQUE NOGUEIRA LIMA",numero:"000036",plano:"Mensal",valor:520,diaVenc:10,diasSem:"Segunda",horario:"",prof:"Amanda",dataMatricula:""}
 ];
-var PI=[];
-var DI=[
-{descricao:"CONTA DE AGUA",valor:146.56,data:"2026-05-12",forma:"Boleto",tipo:"Variavel"},
-{descricao:"ALUGUEL",valor:2302.16,data:"2026-05-12",forma:"Boleto",tipo:"Fixa"},
-{descricao:"ROYALTIES ABRIL",valor:455.03,data:"2026-05-12",forma:"PIX",tipo:"Variavel"},
-{descricao:"SALARIO CLT ABRIL",valor:1965.96,data:"2026-05-12",forma:"PIX",tipo:"Fixa"},
-{descricao:"SALARIO PROFESSORAS PJ ABRIL",valor:2460,data:"2026-05-12",forma:"PIX",tipo:"Variavel"},
-{descricao:"TRAFEGO PAGO",valor:2000,data:"2026-05-12",forma:"PIX+Boleto",tipo:"Fixa"},
-{descricao:"COMPUTADOR PARCELA 4/10",valor:349.90,data:"2026-05-12",forma:"Cartao BB",tipo:"Fixa"},
-{descricao:"FAXINA",valor:500,data:"2026-05-12",forma:"PIX",tipo:"Fixa"},
-{descricao:"MEI PROFESSORA NATHALIA",valor:81.05,data:"2026-05-12",forma:"PIX",tipo:"Fixa"}
-];
+var _afMigrado=false;
 var D={pag:[],mat:[],desp:[],aulas:[],exp:[],caixa:[],canc:[],feedbacks:[],agenda:[],historico:[],perfis:[],leads:[],pront:[]};
 var syncing=false;
 // ===== PROTEÇÃO DE DADOS (auditoria 15/07) =====
@@ -183,7 +175,6 @@ function _novoId(pfx){return pfx+Date.now().toString(36)+Math.random().toString(
 var user=null,tab="painel",subTab="reg",syncOk=false,agendaWeekOffset=0;
 var mesAtualCaixa=null,mesAtualPag=null,mesAtualDesp=null,mesAtualRel=null,mesAtualExp=null,mesAtualPres=null,mesAtualProf=null;
 var _mesProcAnterior=null;
-var relMatAtivas=0,relMatRenovadas=0,relMatCanceladas=0,relMatNovas=0;
 var feedbackAlunoSel="";
 // ===== UTILS =====
 function eCanc(n){return !!(D.canc&&D.canc.find(function(c){return c.nome===n&&(c.ativo===true||String(c.ativo).toLowerCase()==="true");}));}
@@ -231,6 +222,24 @@ function ativosNoMes(pfxAnoMes){
   });
 }
 function cancelados(){return todosObj().filter(function(a){return eCanc(a.nome);});}
+function _movimentacoesMes(anoMes){
+  // anoMes = "YYYY-MM". Baseado nos eventos registrados em D.historico (aba Matrículas).
+  var pfx=anoMes+"-";
+  var novasLista=(D.historico||[]).filter(function(h){return h.evento==="matricula"&&h.dataEvento&&h.dataEvento.startsWith(pfx);});
+  var renovadasLista=(D.historico||[]).filter(function(h){return h.evento==="renovacao"&&h.dataEvento&&h.dataEvento.startsWith(pfx);});
+  // Cancelamentos: usa D.canc como fonte principal (é a mesma fonte que mostra "Cancelado em" nas telas),
+  // já que o histórico pode não ter o evento registrado em casos antigos. Enriquecido com dados do
+  // histórico/matrícula quando disponíveis, para trazer plano e valor no relatório.
+  var canceladasCanc=(D.canc||[]).filter(function(c){return c.data&&c.data.startsWith(pfx)&&(c.ativo===true||String(c.ativo).toLowerCase()==="true");});
+  var canceladasLista=canceladasCanc.map(function(c){
+    var histCanc=(D.historico||[]).find(function(h){return h.nome===c.nome&&h.evento==="cancelado"&&h.dataEvento===c.data;});
+    var d=getDados(c.nome);
+    return {nome:c.nome,plano:(histCanc&&histCanc.plano)||(d&&d.plano)||"",valor:(histCanc&&histCanc.valor)||(d&&d.valor)||0,dataEvento:c.data};
+  });
+  var ativasLista=ativosNoMes(anoMes);
+  return {novas:novasLista.length,renovadas:renovadasLista.length,canceladas:canceladasLista.length,ativas:ativasLista.length,
+    novasLista:novasLista,renovadasLista:renovadasLista,canceladasLista:canceladasLista,ativasLista:ativasLista};
+}
 function getDados(nome){var m=D.mat.find(function(x){return x.nome===nome;});if(m)return m;return AF.find(function(a){return a.nome===nome;})||null;}
 function BRL(v){return "R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fd(s){
@@ -595,6 +604,24 @@ var abas=[
     }
     catch(e){console.warn("Falha ao processar aba:",abas[i],e);}
   }
+  // Migrar, uma única vez, os alunos "fixos" (definidos no código-fonte) para a aba
+  // matriculas do Sheets. A partir daí, AF é esvaziado e TODOS os dados passam a vir
+  // exclusivamente do Sheets — edições, cancelamentos e exclusões passam a persistir de verdade.
+  if(!_afMigrado&&_abaOk["matriculas"]===true&&AF.length>0){
+    var precisaMigrar=false;
+    AF.forEach(function(a){
+      var jaExiste=D.mat.some(function(m){return m.nome===a.nome;});
+      if(!jaExiste){
+        D.mat.push({nome:a.nome,numero:a.numero||"",data:a.dataMatricula||"",plano:a.plano,valor:a.valor,
+          diaVenc:a.diaVenc,diasSem:a.diasSem||"",horario:a.horario||"",prof:a.prof,canal:"",
+          desconto:0,promocao:"",dataMatricula:a.dataMatricula||""});
+        precisaMigrar=true;
+      }
+    });
+    if(precisaMigrar)await saveMatriculas();
+    AF=[];
+    _afMigrado=true;
+  }
   // Criar registro de 1ª matrícula no histórico para quem ainda não tem
   if(!D.historico)D.historico=[];
   if(!D.pront)D.pront=[];
@@ -631,14 +658,7 @@ var abas=[
   }
 }
 
-async function seed(){
-  var ph=["aluno","data","tabela","desconto","bruto","liquido","forma","tipoOp","numDoc","banco"];
-  for(var i=0;i<PI.length;i++){var p=PI[i];await push("pagamentos",ph,ph.map(function(h){return String(p[h]||"");}));}
-  var dh=["descricao","valor","data","forma","tipo"];
-  for(var i=0;i<DI.length;i++){var d=DI[i];await push("despesas",dh,dh.map(function(h){return String(d[h]||"");}));}
-  var ch=["nome","valor","plano","dataVenc","pago","dataPag","numDoc","formaPag"];
-  for(var i=0;i<D.caixa.length;i++){var c=D.caixa[i];await push("caixa",ch,ch.map(function(h){return String(c[h]||"");}));}
-}
+
 
 // ===== RENDER =====
 function render(){document.getElementById("root").innerHTML=user?appHtml():loginHtml();}
@@ -683,6 +703,7 @@ var navAll=NAV.slice();
 
 if(isProf){
 navAll=navAll.filter(function(n){return["agenda","presenca"].includes(n.id);});
+navAll.push({id:"alunos",icon:"ti-users",label:"Alunos"});
 navAll.push({id:"feedbacks",icon:"ti-message-circle-2",label:"Feedbacks"});
 navAll.push({id:"prontuario",icon:"ti-notes",label:"Prontuário"});
 navAll.push({id:"relatorios_pedagogicos",icon:"ti-file-text",label:"Relatórios"});
@@ -719,7 +740,7 @@ navAll.push({id:"relatorio",icon:"ti-file-export",label:"Relatório"});
     +"<div class='content' id='content'>"+tabHtml()+"</div></div></div>";
 }
 function tabHtml(){
-  if(user&&user.role==="Professora"&&["agenda","presenca","prontuario","relatorios_pedagogicos","feedbacks"].indexOf(tab)<0){return "<div class='card'><p class='empty'><i class='ti ti-lock'></i> Acesso restrito.</p></div>";}
+  if(user&&user.role==="Professora"&&["agenda","presenca","prontuario","relatorios_pedagogicos","feedbacks","alunos"].indexOf(tab)<0){return "<div class='card'><p class='empty'><i class='ti ti-lock'></i> Acesso restrito.</p></div>";}
   if(tab==="painel")return painelHtml();
   if(tab==="alunos")return alunosHtml();
   if(tab==="caixa")return caixaHtml();
@@ -1315,10 +1336,12 @@ function matHtml(){
     +"<div class='card'><p class='ct'><i class='ti ti-users'></i> Alunos ativos ("+todos.length+") <span style='font-size:11px;color:var(--mt);font-weight:400'>— clique no nome para editar &middot; <span style='color:var(--tl)'>Novo</span> = matriculado este ciclo</span></p>"
     +"<div class='ox'><table><thead><tr><th>Nome</th><th>Matr\u00edcula</th><th>Data mat.</th><th>Plano</th><th>Valor</th><th>Venc.</th><th>Prof.</th><th>Dias Aulas</th><th>Canal</th><th>A\u00e7\u00f5es</th></tr></thead><tbody>"+rowsTodos+"</tbody></table></div></div>"
     +(cancList.length>0?"<div class='card'><p class='ct' style='color:var(--rd)'><i class='ti ti-x'></i> Alunos cancelados ("+cancList.length+")</p>"
-    +"<div class='ox'><table><thead><tr><th>Nome</th><th>Matr\u00edcula</th><th>Plano</th><th>A\u00e7\u00f5es</th></tr></thead><tbody>"
+    +"<div class='ox'><table><thead><tr><th>Nome</th><th>Matr\u00edcula</th><th>Plano</th><th>Cancelado em</th><th>A\u00e7\u00f5es</th></tr></thead><tbody>"
     +cancList.map(function(a){
+      var cancInfo=(D.canc||[]).find(function(c){return c.nome===a.nome;});
       return "<tr><td style='font-weight:600;cursor:pointer;color:var(--brand2)' onclick=\"editarMatricula('"+a.nome.replace(/'/g,"\\'")+"')\">"+a.nome.split(" ").slice(0,2).join(" ")+"</td><td>"+(a.numero||"&#8212;")+"</td>"
         +"<td><span class='badge bb'>"+a.plano+"</span></td>"
+        +"<td><span class='badge br2' style='font-size:10px'>"+(cancInfo&&cancInfo.data?fd(cancInfo.data):"—")+"</span></td>"
         +"<td style='display:flex;gap:4px'>"
         +"<button class='btn bsm' style='background:var(--bl);color:var(--brand2);border-color:var(--bl)' data-n='"+a.nome+"' onclick=\"editarMatricula(this.dataset.n)\"><i class='ti ti-user'></i> Perfil</button>"
         +"<button class='btn bs bsm' data-n='"+a.nome+"' onclick='rematricularAluno(this.dataset.n)'><i class='ti ti-refresh'></i> Rematricular</button>"
@@ -1475,6 +1498,7 @@ function feedbacksTabHtml(){
 }
 function editarMatricula(nome){
   var d=getDados(nome);if(!d)return;
+  var perfil=getPerfil(nome)||{};
   var feedbacks=(D.feedbacks||[]).filter(function(f){return f.aluno===nome;});
   var fbRows=feedbacks.length===0
     ?"<p class='empty' style='padding:1rem'>Nenhum feedback registrado.</p>"
@@ -1547,6 +1571,7 @@ function editarMatricula(nome){
     +"<div class='fi'><label>Hor\u00e1rio</label><select id='eh'>"+hOpts+"</select></div>"
     +"<div class='fi'><label>Desconto (R$)</label><input type='number' id='edes' value='"+(d.desconto||0)+"' step='0.01'></div></div>"
     +"<div class='fi' style='margin-bottom:12px'><label>A\u00e7\u00e3o promocional</label><input type='text' id='epro' value='"+(d.promocao||"")+"' placeholder='Ex: Promo maio'></div>"
+    +"<div class='fi' style='margin-bottom:12px'><label>Data da aula experimental</label><input type='date' id='eexp' value='"+(perfil.dataExperimental||"")+"'></div>"
     +"<div style='display:flex;gap:8px;margin-top:4px'>"
     +"<button class='btn bp' style='flex:1;justify-content:center' onclick=\"salvarEdicaoMat('"+nome.replace(/'/g,"\\'")+"')\">"
     +"<i class='ti ti-check'></i> Salvar altera\u00e7\u00f5es</button>"
@@ -1651,6 +1676,12 @@ async function salvarEdicaoMat(nome){
   ensureCaixaMes();
   await saveMatriculas();
   await saveCaixa();
+  var dataExp=document.getElementById("eexp")?document.getElementById("eexp").value:"";
+  if(!D.perfis)D.perfis=[];
+  var idxPerfil=D.perfis.findIndex(function(p){return p.nome===nome;});
+  if(idxPerfil>=0)D.perfis[idxPerfil].dataExperimental=dataExp;
+  else D.perfis.push({nome:nome,dataNasc:"",nomePai:"",nomeMae:"",telefone:"",email:"",obs:"",dataExperimental:dataExp});
+  savePerfis();
   closeModal();refreshContent();alert(nome.split(" ")[0]+" atualizado!");
 }
 async function salvarFeedback(nome){
@@ -1703,15 +1734,13 @@ async function cancelarAluno(nome,fixo){
   var obj={nome:nome,fixo:String(fixo),ativo:true,data:hoje};
   if(ei>=0)D.canc[ei]=obj;else D.canc.push(obj);
   var d=getDados(nome);
-  if(d){
-    if(!D.historico)D.historico=[];
-    var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento"];
-    var hObj={nome:nome,plano:d.plano,valor:d.valor,diaVenc:d.diaVenc,prof:d.prof,
-      dataMatricula:d.dataMatricula||"",dataRenovacao:"",vencimento:"",
-      evento:"cancelado",dataEvento:hoje};
-    D.historico.push(hObj);
-    await saveHistoricoAll(); // persiste o evento de cancelamento no historico
-  }
+  if(!D.historico)D.historico=[];
+  var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento"];
+  var hObj={nome:nome,plano:d?d.plano:"",valor:d?d.valor:0,diaVenc:d?d.diaVenc:"",prof:d?d.prof:"",
+    dataMatricula:(d&&d.dataMatricula)||"",dataRenovacao:"",vencimento:"",
+    evento:"cancelado",dataEvento:hoje};
+  D.historico.push(hObj);
+  await saveHistoricoAll(); // persiste o evento de cancelamento no historico (sempre, mesmo sem dados completos do plano)
   D.caixa=D.caixa.filter(function(c){return c.nome!==nome||(c.pago===true||c.pago==="true");});
   await saveCancelados();
   await saveCaixa();
@@ -2361,15 +2390,16 @@ function relHtml(){
   var plSemestral=atvList.filter(function(a){return(a.plano||"").toLowerCase()==="semestral";}).length;
   var plAnual=atvList.filter(function(a){return(a.plano||"").toLowerCase()==="anual";}).length;
   var totalAtivos=atvList.length;
+  var mov=_movimentacoesMes(_ra+"-"+_rm);
 
   return "<div style='margin-bottom:16px'><div class='fi' style='max-width:200px'><label>Mês do Relatório "+debugMeses+"</label><select onchange='setMesRel(this.value)'>"+opts_rel_html+"</select></div></div>"
-    // Matrículas — visível para todos
-    +"<div class='card'><p class='ct'><i class='ti ti-users'></i> Matrículas (preencha manualmente)</p>"
-    +"<div class='fr4'>"
-    +"<div class='fi'><label>Ativas</label><input type='number' id='relMatA' value='"+relMatAtivas+"' onchange='relMatAtivas=+this.value'></div>"
-    +"<div class='fi'><label>Renovadas</label><input type='number' id='relMatR' value='"+relMatRenovadas+"' onchange='relMatRenovadas=+this.value'></div>"
-    +"<div class='fi'><label>Canceladas</label><input type='number' id='relMatC' value='"+relMatCanceladas+"' onchange='relMatCanceladas=+this.value'></div>"
-    +"<div class='fi'><label>Novas</label><input type='number' id='relMatN' value='"+relMatNovas+"' onchange='relMatNovas=+this.value'></div>"
+    // Matrículas — visível para todos, calculado automaticamente a partir da aba Matrículas
+    +"<div class='card'><p class='ct'><i class='ti ti-users'></i> Movimenta\u00e7\u00e3o de Matr\u00edculas <span style='font-size:11px;color:var(--mt);font-weight:400'>(calculado automaticamente com base na aba Matr\u00edculas)</span></p>"
+    +"<div class='g4'>"
+    +"<div class='kpi'><div class='ka' style='background:var(--brand2)'></div><p class='kl'>Ativas</p><p class='kv' style='color:var(--brand2)'>"+mov.ativas+"</p><p class='ks'>no m\u00eas selecionado</p></div>"
+    +"<div class='kpi'><div class='ka' style='background:var(--gn)'></div><p class='kl'>Renovadas</p><p class='kv' style='color:var(--gn)'>"+mov.renovadas+"</p><p class='ks'>rematr\u00edculas no m\u00eas</p></div>"
+    +"<div class='kpi'><div class='ka' style='background:var(--rd)'></div><p class='kl'>Canceladas</p><p class='kv' style='color:var(--rd)'>"+mov.canceladas+"</p><p class='ks'>cancelamentos no m\u00eas</p></div>"
+    +"<div class='kpi'><div class='ka' style='background:var(--pu)'></div><p class='kl'>Novas</p><p class='kv' style='color:var(--pu)'>"+mov.novas+"</p><p class='ks'>matr\u00edculas novas no m\u00eas</p></div>"
     +"</div></div>"
     // Dashboard de planos + financeiro — apenas Gestora
     +(user.role==="Gestora"
@@ -2400,15 +2430,17 @@ function relHtml(){
         +"<div style='display:flex;gap:10px;flex-wrap:wrap'>"
         +"<button class='btn bp' onclick='exportPDFCompleto()'><i class='ti ti-file-text'></i> PDF Completo (com despesas)</button>"
         +"<button class='btn' style='background:var(--pl);color:var(--pu);border-color:var(--pl)' onclick='exportPDFSimplificado()'><i class='ti ti-file-analytics'></i> PDF Simplificado (só faturamento)</button>"
+        +"<button class='btn' style='background:var(--gl);color:var(--gn);border-color:var(--gl)' onclick='exportPDFMovimentacoes()'><i class='ti ti-users'></i> PDF Movimentações (matrículas)</button>"
         +"<button class='btn' style='background:#f0f0f0;color:#555;border-color:#ddd' onclick='exportDocx()'><i class='ti ti-file-word'></i> Declaração (Word)</button>"
         +"<button class='btn' style='background:#e8f5e9;color:#2e7d32;border-color:#c8e6c9' onclick='exportPDFCaixa()'><i class='ti ti-currency-dollar'></i> Com Caixa do Mês</button>"
         +"<button class='btn' onclick='exportCSV()'><i class='ti ti-file-spreadsheet'></i> CSV (Excel)</button>"
         +"</div></div>"
-      : // Secretária: apenas botão PDF Simplificado
+      : // Secretária: PDF Simplificado + Movimentações
         "<div class='card'><p class='ct'><i class='ti ti-download'></i> Exportar</p>"
-        +"<p style='font-size:12px;color:var(--mt);margin-bottom:12px'>Gere o relatório de faturamento do mês selecionado:</p>"
+        +"<p style='font-size:12px;color:var(--mt);margin-bottom:12px'>Gere o relatório de faturamento ou de movimentações do mês selecionado:</p>"
         +"<div style='display:flex;gap:10px;flex-wrap:wrap'>"
         +"<button class='btn' style='background:var(--pl);color:var(--pu);border-color:var(--pl)' onclick='exportPDFSimplificado()'><i class='ti ti-file-analytics'></i> PDF Simplificado (só faturamento)</button>"
+        +"<button class='btn' style='background:var(--gl);color:var(--gn);border-color:var(--gl)' onclick='exportPDFMovimentacoes()'><i class='ti ti-users'></i> PDF Movimentações (matrículas)</button>"
         +"</div></div>"
     );
 }
@@ -2598,14 +2630,16 @@ function exportPDF(tipoRel){
     +"<div class='kpi-card verde-agua'><div class='kpi-label'>Anual</div><div class='kpi-value verde-agua'>"+plAnual+"</div><div class='kpi-sub'>alunos</div></div>"
     +"</div>";
 
-  // --- MATRÍCULAS MANUAIS ---
+  var mov=_movimentacoesMes(_ra+"-"+_rm);
+
+  // --- MATRÍCULAS AUTOMÁTICAS ---
   bodyHTML+="<div class='section-title'>Movimentação de Matrículas</div>"
     +"<div class='table-wrap'><table>"
     +"<thead><tr><th>Indicador</th><th>Qtd</th></tr></thead><tbody>"
-    +"<tr><td>Matrículas Ativas</td><td class='valor-destaque'>"+relMatAtivas+"</td></tr>"
-    +"<tr><td>Matrículas Renovadas</td><td class='valor-destaque'>"+relMatRenovadas+"</td></tr>"
-    +"<tr><td>Matrículas Canceladas</td><td class='valor-destaque'>"+relMatCanceladas+"</td></tr>"
-    +"<tr><td>Matrículas Novas</td><td class='valor-destaque'>"+relMatNovas+"</td></tr>"
+    +"<tr><td>Matrículas Ativas</td><td class='valor-destaque'>"+mov.ativas+"</td></tr>"
+    +"<tr><td>Matrículas Renovadas</td><td class='valor-destaque'>"+mov.renovadas+"</td></tr>"
+    +"<tr><td>Matrículas Canceladas</td><td class='valor-destaque'>"+mov.canceladas+"</td></tr>"
+    +"<tr><td>Matrículas Novas</td><td class='valor-destaque'>"+mov.novas+"</td></tr>"
     +"</tbody></table></div>";
   
   // --- RECEBIMENTOS ---
@@ -2667,6 +2701,121 @@ function exportPDF(tipoRel){
   
   var w=window.open("","_blank");
   w.document.write("<!DOCTYPE html><html lang='pt-BR'><head><meta charset='UTF-8'><title>Relatório "+mesTitulo+"</title><style>"+css+"</style></head><body>"
+    +"<button class='print-btn no-print' onclick='window.print()'>&#8595; Imprimir / Salvar PDF</button>"
+    +"<div class='page'>"+bodyHTML+"</div>"
+    +"</body></html>");
+  w.document.close();
+}
+
+
+function exportPDFMovimentacoes(){
+  if(!mesAtualRel){var _d=new Date();mesAtualRel=String(_d.getMonth()+1).padStart(2,"0")+"/"+_d.getFullYear();}
+  var _ma=mesAtualRel.split("/"),_rm=String(+_ma[0]).padStart(2,"0"),_ra=_ma[1];
+  var anoMes=_ra+"-"+_rm;
+  var mov=_movimentacoesMes(anoMes);
+  var mesesNomes=["","Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  var mesTitulo=mesesNomes[+_rm]+" de "+_ra;
+
+  var css="@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');"
+    +"*{box-sizing:border-box;margin:0;padding:0}"
+    +"body{font-family:'Plus Jakarta Sans',sans-serif;background:#F4F6F9;color:#1a2535;font-size:13px;line-height:1.6}"
+    +"@page{margin:0;size:A4}"
+    +".page{width:210mm;min-height:297mm;margin:0 auto;background:#fff;box-shadow:0 0 40px rgba(0,0,0,.08)}"
+    +".header{background:linear-gradient(135deg,#0b1e35 0%,#14335a 60%,#1a4070 100%);padding:36px 44px 28px;position:relative;overflow:hidden}"
+    +".header::before{content:'';position:absolute;top:0;right:0;width:340px;height:100%;background:linear-gradient(225deg,rgba(255,255,255,.04) 0%,transparent 60%)}"
+    +".header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,rgba(126,185,230,.5),rgba(255,255,255,.15),transparent)}"
+    +".header-inner{position:relative;z-index:1;display:flex;justify-content:space-between;align-items:center}"
+    +".header-brand{font-family:'Plus Jakarta Sans',sans-serif;font-size:36px;font-weight:700;color:#fff;letter-spacing:-0.5px;line-height:1;flex:1}"
+    +".header-right{text-align:right}"
+    +".header-tipo{font-size:9px;text-transform:uppercase;letter-spacing:0.14em;color:rgba(255,255,255,.45);font-weight:600;margin-bottom:5px}"
+    +".header-mes{font-family:'Plus Jakarta Sans',sans-serif;font-size:20px;color:#fff;font-weight:700;letter-spacing:-0.3px}"
+    +".header-data{font-size:10px;color:rgba(255,255,255,.38);margin-top:3px;letter-spacing:0.03em}"
+    +".body{padding:30px 44px 40px;background:#fff}"
+    +".section-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700;color:#0b1e35;margin:26px 0 12px;display:flex;align-items:center;gap:9px;letter-spacing:0.01em}"
+    +".section-title::before{content:'';width:3px;height:16px;background:linear-gradient(180deg,#14335a,#5499d0);border-radius:2px;flex-shrink:0}"
+    +".section-title.first{margin-top:0}"
+    +".kpi-grid{display:grid;gap:10px;margin-bottom:4px}"
+    +".kpi-grid-4{grid-template-columns:repeat(4,1fr)}"
+    +".kpi-card{background:#F7F9FC;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;position:relative;overflow:hidden}"
+    +".kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:8px 8px 0 0}"
+    +".kpi-card.verde::before{background:linear-gradient(90deg,#1a7f4c,#27ae60)}"
+    +".kpi-card.azul::before{background:linear-gradient(90deg,#14335a,#2e6da4)}"
+    +".kpi-card.roxo::before{background:linear-gradient(90deg,#5e35b1,#8e6fd4)}"
+    +".kpi-card.vermelho::before{background:linear-gradient(90deg,#b03030,#e74c3c)}"
+    +".kpi-label{font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:#7a8fa3;font-weight:600;margin-bottom:5px}"
+    +".kpi-value{font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:700;line-height:1.1;color:#0b1e35}"
+    +".kpi-value.verde{color:#1a7f4c}.kpi-value.azul{color:#14335a}.kpi-value.roxo{color:#5e35b1}.kpi-value.vermelho{color:#b03030}"
+    +".kpi-sub{font-size:9.5px;color:#b0bec5;margin-top:3px;font-weight:400}"
+    +"table{width:100%;border-collapse:collapse;font-size:11px}"
+    +".table-wrap{border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}"
+    +"thead tr{background:linear-gradient(90deg,#0b1e35,#1a3560)}"
+    +"th{color:rgba(255,255,255,.85);padding:8px 12px;text-align:left;font-weight:600;font-size:9.5px;text-transform:uppercase;letter-spacing:0.08em}"
+    +"td{padding:7px 12px;border-bottom:1px solid #f0f4f7;color:#2d3a4a;vertical-align:middle}"
+    +"tr:last-child td{border-bottom:none}"
+    +"tr:nth-child(even) td{background:#fafbfd}"
+    +".valor-destaque{font-weight:700;color:#0b1e35;font-family:'Plus Jakarta Sans',sans-serif}"
+    +".empty-note{padding:14px;text-align:center;color:#9aa8b5;font-size:11.5px;font-style:italic}"
+    +".footer{background:#F7F9FC;border-top:1px solid #e2e8f0;padding:12px 44px;display:flex;justify-content:space-between;align-items:center}"
+    +".footer-txt{font-size:9.5px;color:#aab4be;letter-spacing:0.03em}"
+    +"@media print{.no-print{display:none!important}body{background:#fff}.page{box-shadow:none}}"
+    +".print-btn{position:fixed;top:20px;right:20px;padding:9px 20px;background:linear-gradient(135deg,#0b1e35,#1a4070);color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;font-family:'Plus Jakarta Sans',sans-serif;box-shadow:0 4px 14px rgba(11,30,53,.25);z-index:999;letter-spacing:0.03em}"
+    +".print-btn:hover{opacity:.9}";
+
+  function linhaVazia(cols){return "<tr><td colspan='"+cols+"' class='empty-note'>Nenhum registro no mês.</td></tr>";}
+
+  var ativosRows=mov.ativasLista.slice().sort(function(a,b){return a.nome<b.nome?-1:1;}).map(function(a){
+    return "<tr><td>"+a.nome.split(" ").slice(0,3).join(" ")+"</td><td>"+(a.plano||"—")+"</td><td class='valor-destaque'>"+BRL(a.valor)+"</td><td>Dia "+(a.diaVenc||"—")+"</td></tr>";
+  }).join("")||linhaVazia(4);
+
+  var renovadasRows=mov.renovadasLista.slice().sort(function(a,b){return (a.dataEvento||"")<(b.dataEvento||"")?-1:1;}).map(function(h){
+    return "<tr><td>"+h.nome.split(" ").slice(0,3).join(" ")+"</td><td>"+fd(h.dataRenovacao||h.dataEvento)+"</td><td>"+(h.plano||"—")+"</td><td class='valor-destaque'>"+BRL(h.valor)+"</td></tr>";
+  }).join("")||linhaVazia(4);
+
+  var canceladasRows=mov.canceladasLista.slice().sort(function(a,b){return (a.dataEvento||"")<(b.dataEvento||"")?-1:1;}).map(function(h){
+    return "<tr><td>"+h.nome.split(" ").slice(0,3).join(" ")+"</td><td>"+fd(h.dataEvento)+"</td><td>"+(h.plano||"—")+"</td><td class='valor-destaque'>"+BRL(h.valor)+"</td></tr>";
+  }).join("")||linhaVazia(4);
+
+  var novasRows=mov.novasLista.slice().sort(function(a,b){return (a.dataEvento||"")<(b.dataEvento||"")?-1:1;}).map(function(h){
+    return "<tr><td>"+h.nome.split(" ").slice(0,3).join(" ")+"</td><td>"+fd(h.dataMatricula||h.dataEvento)+"</td><td>"+(h.plano||"—")+"</td><td class='valor-destaque'>"+BRL(h.valor)+"</td></tr>";
+  }).join("")||linhaVazia(4);
+
+  var bodyHTML="<div class='header'><div class='header-inner'>"
+    +"<div class='header-brand'>Relatório de Movimentações</div>"
+    +"<div class='header-right'><div class='header-tipo'>Matrículas</div><div class='header-mes'>"+mesTitulo+"</div>"
+    +"<div class='header-data'>Gerado em "+new Date().toLocaleDateString("pt-BR")+"</div></div>"
+    +"</div></div>";
+
+  bodyHTML+="<div class='body'>";
+  bodyHTML+="<div class='section-title first'>Resumo do Mês</div>"
+    +"<div class='kpi-grid kpi-grid-4'>"
+    +"<div class='kpi-card azul'><div class='kpi-label'>Alunos Ativos</div><div class='kpi-value azul'>"+mov.ativas+"</div><div class='kpi-sub'>no mês selecionado</div></div>"
+    +"<div class='kpi-card verde'><div class='kpi-label'>Novas Matrículas</div><div class='kpi-value verde'>"+mov.novas+"</div><div class='kpi-sub'>no mês</div></div>"
+    +"<div class='kpi-card roxo'><div class='kpi-label'>Rematrículas</div><div class='kpi-value roxo'>"+mov.renovadas+"</div><div class='kpi-sub'>renovações no mês</div></div>"
+    +"<div class='kpi-card vermelho'><div class='kpi-label'>Cancelamentos</div><div class='kpi-value vermelho'>"+mov.canceladas+"</div><div class='kpi-sub'>no mês</div></div>"
+    +"</div>";
+
+  bodyHTML+="<div class='section-title'>Alunos Ativos ("+mov.ativas+")</div>"
+    +"<div class='table-wrap'><table><thead><tr><th>Aluno</th><th>Plano</th><th>Valor</th><th>Vencimento</th></tr></thead>"
+    +"<tbody>"+ativosRows+"</tbody></table></div>";
+
+  bodyHTML+="<div class='section-title'>Rematrículas no Mês ("+mov.renovadas+")</div>"
+    +"<div class='table-wrap'><table><thead><tr><th>Aluno</th><th>Data</th><th>Plano</th><th>Valor</th></tr></thead>"
+    +"<tbody>"+renovadasRows+"</tbody></table></div>";
+
+  bodyHTML+="<div class='section-title'>Novas Matrículas no Mês ("+mov.novas+")</div>"
+    +"<div class='table-wrap'><table><thead><tr><th>Aluno</th><th>Data</th><th>Plano</th><th>Valor</th></tr></thead>"
+    +"<tbody>"+novasRows+"</tbody></table></div>";
+
+  bodyHTML+="<div class='section-title'>Cancelamentos no Mês ("+mov.canceladas+")</div>"
+    +"<div class='table-wrap'><table><thead><tr><th>Aluno</th><th>Data</th><th>Plano</th><th>Valor</th></tr></thead>"
+    +"<tbody>"+canceladasRows+"</tbody></table></div>";
+
+  bodyHTML+="</div>";
+  bodyHTML+="<div class='footer'><span class='footer-txt'>Academia — Relatório de Movimentações &middot; "+mesTitulo+"</span>"
+    +"<span class='footer-txt'>Confidencial &middot; Gerado em "+new Date().toLocaleDateString("pt-BR")+"</span></div>";
+
+  var w=window.open("","_blank");
+  w.document.write("<!DOCTYPE html><html lang='pt-BR'><head><meta charset='UTF-8'><title>Movimentações "+mesTitulo+"</title><style>"+css+"</style></head><body>"
     +"<button class='print-btn no-print' onclick='window.print()'>&#8595; Imprimir / Salvar PDF</button>"
     +"<div class='page'>"+bodyHTML+"</div>"
     +"</body></html>");
@@ -3767,16 +3916,20 @@ function exportPDFPresenca(){
 // ===== ALUNOS =====
 function getPerfil(nome){return (D.perfis||[]).find(function(p){return p.nome===nome;})||null;}
 async function savePerfisNow(){
-  var h=["nome","dataNasc","nomePai","nomeMae","telefone","email","obs"];
+  var h=["nome","dataNasc","nomePai","nomeMae","telefone","email","obs","dataExperimental"];
   var rows=(D.perfis||[]).map(function(p){return h.map(function(k){return String(p[k]||"");});});
   await rewriteAba("perfis",h,rows);
 }
 function savePerfis(){dbSave("perfis",savePerfisNow);}
 
 function alunosHtml(){
+  var isProf=(user.role==="Professora");
   var todos=todosObj().sort(function(a,b){return a.nome<b.nome?-1:1;});
   var atv=todos.filter(function(a){return!eCanc(a.nome);});
   var can=todos.filter(function(a){return eCanc(a.nome);});
+  var opcoesAlunoSel=todos.map(function(a){return "<option value='"+a.nome.replace(/'/g,"&#39;")+"'>"+a.nome.split(" ").slice(0,3).join(" ")+(eCanc(a.nome)?" (Cancelado)":"")+"</option>";}).join("");
+  var filtroSel="<div class='card' style='margin-bottom:16px'><div class='fi' style='max-width:340px'><label>Selecionar aluno</label>"
+    +"<select onchange=\"if(this.value)abrirPerfilAluno(this.value)\"><option value=''>Buscar aluno... ("+todos.length+")</option>"+opcoesAlunoSel+"</select></div></div>";
   var pfx=mesAtualPfx();
   function getStatus(a){
     var pagAtual=D.pag.find(function(p){return p.aluno===a.nome&&p.data&&p.data.startsWith(pfx);});
@@ -3802,7 +3955,7 @@ function alunosHtml(){
     var dias=st==="atrasado"?diasAtraso(a):0;
     var perfil=getPerfil(a.nome);
     var avatarLetras=a.nome.split(" ").slice(0,2).map(function(w){return w[0];}).join("");
-    var corAvatar=st==="ok"?"background:#E8F5E9;color:#2E7D32":st==="atrasado"?"background:#FFEBEE;color:#C62828":"background:#FFF8E1;color:#E65100";
+    var corAvatar=isProf?"background:var(--bl);color:var(--brand)":(st==="ok"?"background:#E8F5E9;color:#2E7D32":st==="atrasado"?"background:#FFEBEE;color:#C62828":"background:#FFF8E1;color:#E65100");
     var badgeHtml=st==="ok"?"<span class='badge bg' style='font-size:10px'><i class='ti ti-check'></i> Em dia</span>"
       :st==="atrasado"?"<span class='badge br2' style='font-size:10px'><i class='ti ti-alert-circle'></i> "+dias+" dia"+(dias===1?"":"s")+" atr.</span>"
       :"<span class='badge bam' style='font-size:10px'><i class='ti ti-clock'></i> Pendente</span>";
@@ -3819,26 +3972,28 @@ function alunosHtml(){
       +"</div>"
       +"<div style='display:flex;justify-content:space-between;align-items:center'>"
       +"<span class='badge bb' style='font-size:10px'>"+a.plano+"</span>"
-      +badgeHtml
+      +(isProf?"":badgeHtml)
       +"</div>"
       +"<div style='font-size:11px;color:var(--mt)'>"+a.prof+" &middot; "+a.diasSem+"</div>"
       +"</div>";
   }).join("");
   var cardsCan=can.map(function(a){
+    var cancInfo=(D.canc||[]).find(function(c){return c.nome===a.nome;});
     return "<div style='background:var(--b1);border:1px solid var(--br);border-radius:var(--rs);padding:12px;cursor:pointer;opacity:.7'"
       +" onclick=\"abrirPerfilAluno('"+a.nome.replace(/'/g,"\\'")+"')\">"
       +"<p style='font-size:12px;font-weight:700;color:var(--tx);margin:0 0 4px'>"+a.nome.split(" ").slice(0,3).join(" ")+"</p>"
-      +"<div style='display:flex;gap:6px;align-items:center'>"
-      +"<span class='badge br2' style='font-size:10px'>Cancelado</span>"
+      +"<div style='display:flex;gap:6px;align-items:center;flex-wrap:wrap'>"
+      +"<span class='badge br2' style='font-size:10px'>Cancelado"+(cancInfo&&cancInfo.data?" em "+fd(cancInfo.data):"")+"</span>"
       +"<span class='badge bb' style='font-size:10px'>"+a.plano+"</span>"
       +"</div></div>";
   }).join("");
-  return "<div class='kg'>"
+  return filtroSel
+    +(isProf?"":"<div class='kg'>"
     +"<div class='kpi'><div class='ka' style='background:var(--brand2)'></div><p class='kl'>Alunos Ativos</p><p class='kv' style='color:var(--brand2)'>"+totalAtivos+"</p><p class='ks'>total matriculados</p></div>"
     +"<div class='kpi'><div class='ka' style='background:var(--gn)'></div><p class='kl'>Em Dia</p><p class='kv' style='color:var(--gn)'>"+totalOk+"</p><p class='ks'>mensalidade quitada</p></div>"
     +"<div class='kpi'><div class='ka' style='background:var(--am)'></div><p class='kl'>Pendente</p><p class='kv' style='color:var(--am)'>"+totalPend+"</p><p class='ks'>aguardando pgto</p></div>"
     +"<div class='kpi'><div class='ka' style='background:var(--rd)'></div><p class='kl'>Inadimplente</p><p class='kv' style='color:var(--rd)'>"+totalAtraso+"</p><p class='ks'>pagamento atrasado</p></div>"
-    +"</div>"
+    +"</div>")
     +"<div class='card'><p class='ct'><i class='ti ti-users'></i> Alunos Ativos ("+totalAtivos+") <span style='font-size:11px;color:var(--mt);font-weight:400'>— clique para abrir perfil</span></p>"
     +"<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px'>"+cardsAtivos+"</div></div>"
     +(can.length>0?"<div class='card'><p class='ct' style='color:var(--mt)'><i class='ti ti-user-x'></i> Cancelados ("+can.length+")</p>"
@@ -3848,6 +4003,7 @@ function alunosHtml(){
 function abrirPerfilAluno(nome){
   var a=todosObj().find(function(x){return x.nome===nome;});
   if(!a)return;
+  var isProf=(user.role==="Professora");
   var perfil=getPerfil(nome)||{};
   var isCan=eCanc(nome);
   // Feedbacks
@@ -3876,10 +4032,10 @@ function abrirPerfilAluno(nome){
         +"</span>"
         +(h.dataRenovacao?"<span style='font-size:11px;color:var(--mt)'>Renovado: "+fd(h.dataRenovacao)+"</span>":"")
         +"</div>"
-        +"<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:12px'>"
+        +"<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:12px'>"
         +"<div><span style='color:var(--mt)'>Matrícula:</span><br><strong>"+(h.dataMatricula?fd(h.dataMatricula):"—")+"</strong></div>"
         +"<div><span style='color:var(--mt)'>Vencimento:</span><br><strong>"+(h.vencimento?fd(h.vencimento):"Mensal")+"</strong></div>"
-        +"<div><span style='color:var(--mt)'>Valor:</span><br><strong>"+BRL(h.valor)+"</strong></div>"
+        +(isProf?"":"<div><span style='color:var(--mt)'>Valor:</span><br><strong>"+BRL(h.valor)+"</strong></div>")
         +"</div></div>";
     }).join("");
   // Pagamentos — todos os históricos + dashboard mês atual
@@ -3935,12 +4091,12 @@ function abrirPerfilAluno(nome){
     +"<span class='badge' style='background:var(--b2);color:var(--mt)'>Nº "+a.numero+"</span>"
     +(isCan?"<span class='badge br2'>Cancelado</span>":"")
     +"</div></div>"
-    +"<button class='btn' onclick=\"goTab('matriculas');closeModal();\" style='font-size:12px'><i class='ti ti-edit'></i> Editar matrícula</button>"
+    +(isProf?"":"<button class='btn' onclick=\"goTab('matriculas');closeModal();\" style='font-size:12px'><i class='ti ti-edit'></i> Editar matrícula</button>")
     +"<button class='btn bsm' onclick='closeModal()' style='padding:8px'><i class='ti ti-x'></i></button>"
     +"</div>"
     +"<div class='tabs'>"
     +"<button class='tab active' id='ptab1' onclick='switchPTab(1)'>Dados Pessoais</button>"
-    +"<button class='tab' id='ptab2' onclick='switchPTab(2)'>Pagamentos</button>"
+    +(isProf?"":"<button class='tab' id='ptab2' onclick='switchPTab(2)'>Pagamentos</button>")
     +"<button class='tab' id='ptab3' onclick='switchPTab(3)'>Feedbacks ("+feedbacks.length+")</button>"
     +"<button class='tab' id='ptab4' onclick='switchPTab(4)'>Histórico ("+hist.length+")</button>"
     +"</div>"
@@ -3958,26 +4114,27 @@ function abrirPerfilAluno(nome){
     +"<div class='fi'><label>Telefone / WhatsApp</label><input type='text' id='pfTel' value='"+(perfil.telefone||"")+"' placeholder='(14) 99999-9999'></div>"
     +"<div class='fi'><label>E-mail</label><input type='text' id='pfEmail' value='"+(perfil.email||"")+"' placeholder='email@exemplo.com'></div>"
     +"</div>"
+    +"<div class='fi' style='margin-bottom:12px;max-width:260px'><label>Data da aula experimental</label><input type='date' id='pfExp' value='"+(perfil.dataExperimental||"")+"'></div>"
     +"<div class='fi' style='margin-bottom:12px'><label>Observações</label><textarea id='pfObs' rows='2' style='resize:vertical' placeholder='Informações adicionais...'>"+(perfil.obs||"")+"</textarea></div>"
     +"<div class='dv'></div>"
     +"<p style='font-size:13px;font-weight:600;margin:10px 0 8px'>Dados da matrícula</p>"
     +"<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:12px;margin-bottom:12px'>"
     +"<div style='background:var(--b2);border-radius:var(--rs);padding:10px'><span style='color:var(--mt)'>Matrícula</span><br><strong>"+fd(a.dataMatricula)+"</strong></div>"
     +"<div style='background:var(--b2);border-radius:var(--rs);padding:10px'><span style='color:var(--mt)'>Plano</span><br><strong>"+a.plano+"</strong></div>"
-    +"<div style='background:var(--b2);border-radius:var(--rs);padding:10px'><span style='color:var(--mt)'>Valor</span><br><strong>"+BRL(a.valor)+"</strong></div>"
-    +"<div style='background:var(--b2);border-radius:var(--rs);padding:10px'><span style='color:var(--mt)'>Dia venc.</span><br><strong>Dia "+a.diaVenc+"</strong></div>"
+    +(isProf?"":"<div style='background:var(--b2);border-radius:var(--rs);padding:10px'><span style='color:var(--mt)'>Valor</span><br><strong>"+BRL(a.valor)+"</strong></div>"
+    +"<div style='background:var(--b2);border-radius:var(--rs);padding:10px'><span style='color:var(--mt)'>Dia venc.</span><br><strong>Dia "+a.diaVenc+"</strong></div>")
     +"<div style='background:var(--b2);border-radius:var(--rs);padding:10px'><span style='color:var(--mt)'>Professora</span><br><strong>"+a.prof+"</strong></div>"
     +"<div style='background:var(--b2);border-radius:var(--rs);padding:10px'><span style='color:var(--mt)'>Dias aula</span><br><strong>"+(a.diasSem||"—")+"</strong></div>"
     +"</div>"
     +"<div id='pfMsg'></div>"
     +"<button class='btn bp bf' onclick=\"salvarPerfil('"+nome.replace(/'/g,"\\'")+"')\"><i class='ti ti-check'></i> Salvar dados pessoais</button>"
     +"</div>"
-    // Tab 2: Pagamentos
-    +"<div id='ptab-2' style='display:none'>"
+    // Tab 2: Pagamentos (oculta para a Professora)
+    +(isProf?"":"<div id='ptab-2' style='display:none'>"
     +dashPag
     +"<p style='font-size:12px;font-weight:700;color:var(--mt);letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px'>Histórico de Pagamentos</p>"
     +histPag
-    +"</div>"
+    +"</div>")
     // Tab 3: Feedbacks
     +"<div id='ptab-3' style='display:none'>"
     +"<div style='max-height:280px;overflow-y:auto'>"+fbRows+"</div>"
@@ -4007,7 +4164,8 @@ async function salvarPerfil(nome){
     nomeMae:document.getElementById("pfMae").value||"",
     telefone:document.getElementById("pfTel").value||"",
     email:document.getElementById("pfEmail").value||"",
-    obs:document.getElementById("pfObs").value||""
+    obs:document.getElementById("pfObs").value||"",
+    dataExperimental:document.getElementById("pfExp")?document.getElementById("pfExp").value:(getPerfil(nome)||{}).dataExperimental||""
   };
   if(idx>=0)D.perfis[idx]=obj;else D.perfis.push(obj);
   savePerfis();
