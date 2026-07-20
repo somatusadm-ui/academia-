@@ -184,6 +184,7 @@ var user=null,tab="painel",subTab="reg",syncOk=false,agendaWeekOffset=0;
 var mesAtualCaixa=null,mesAtualPag=null,mesAtualDesp=null,mesAtualRel=null,mesAtualExp=null,mesAtualPres=null,mesAtualProf=null;
 var _mesProcAnterior=null;
 var relMatAtivas=0,relMatRenovadas=0,relMatCanceladas=0,relMatNovas=0;
+var feedbackAlunoSel="";
 // ===== UTILS =====
 function eCanc(n){return !!(D.canc&&D.canc.find(function(c){return c.nome===n&&(c.ativo===true||String(c.ativo).toLowerCase()==="true");}));}
 function todosObj(){
@@ -669,10 +670,10 @@ var NAV=[
   {id:"pagamentos",icon:"ti-cash",label:"Pagamentos"},
   {id:"matriculas",icon:"ti-user-plus",label:"Matr\u00edculas"},
   {id:"alunos",icon:"ti-users",label:"Alunos"},
+  {id:"feedbacks",icon:"ti-message-circle-2",label:"Feedbacks"},
   {id:"contratos",icon:"ti-file-certificate",label:"Contratos"},
   {id:"agenda",icon:"ti-calendar-event",label:"Agenda"},
   {id:"despesas",icon:"ti-receipt",label:"Despesas"},
-  {id:"professoras",icon:"ti-school",label:"Professoras"},
   {id:"presenca",icon:"ti-check",label:"Presença"}
 ];
 function appHtml(){
@@ -682,10 +683,10 @@ var navAll=NAV.slice();
 
 if(isProf){
 navAll=navAll.filter(function(n){return["agenda","presenca"].includes(n.id);});
+navAll.push({id:"feedbacks",icon:"ti-message-circle-2",label:"Feedbacks"});
 navAll.push({id:"prontuario",icon:"ti-notes",label:"Prontuário"});
 navAll.push({id:"relatorios_pedagogicos",icon:"ti-file-text",label:"Relatórios"});
 }else{
-if(!isCat)navAll=navAll.filter(function(n){return n.id!=="professoras";});
 navAll.push({id:"relatorio",icon:"ti-file-export",label:"Relatório"});
 }
   var pendExp=D.exp.filter(function(e){return!e.convertido&&!e.naoConvertido;}).length;
@@ -718,16 +719,16 @@ navAll.push({id:"relatorio",icon:"ti-file-export",label:"Relatório"});
     +"<div class='content' id='content'>"+tabHtml()+"</div></div></div>";
 }
 function tabHtml(){
-  if(user&&user.role==="Professora"&&["agenda","presenca","prontuario","relatorios_pedagogicos"].indexOf(tab)<0){return "<div class='card'><p class='empty'><i class='ti ti-lock'></i> Acesso restrito.</p></div>";}
+  if(user&&user.role==="Professora"&&["agenda","presenca","prontuario","relatorios_pedagogicos","feedbacks"].indexOf(tab)<0){return "<div class='card'><p class='empty'><i class='ti ti-lock'></i> Acesso restrito.</p></div>";}
   if(tab==="painel")return painelHtml();
   if(tab==="alunos")return alunosHtml();
   if(tab==="caixa")return caixaHtml();
   if(tab==="pagamentos")return pagHtml();
   if(tab==="matriculas")return matHtml();
+  if(tab==="feedbacks")return feedbacksTabHtml();
   if(tab==="contratos")return contratosHtml();
   if(tab==="agenda")return agendaHtml();
   if(tab==="despesas")return despHtml();
-  if(tab==="professoras"){if(user.role!=="Gestora"){return "<div class='card'><p class='empty'><i class='ti ti-lock'></i> Acesso restrito.</p></div>";}return profHtml();}
   if(tab==="presenca")return presencaHtml();
   if(tab==="prontuario")return prontuarioHtml();
   if(tab==="relatorios_pedagogicos")return relatoriosPedagogicosHtml();
@@ -872,7 +873,8 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
   var totalDesp = desp_mes.reduce(function(a,d){return a+(+d.valor||0);},0);
   
   var isGestora=(user.role==="Gestora");
-  return alertaHtml
+  return feedbacksDoMesCardHtml()
+    +alertaHtml
     +(isGestora?htmlGrafico:"")
     +"<div class='card'>"
     +"<p class='ct'><i class='ti ti-calendar'></i> Resumo mensal — "+mesAtualNome+" de "+anoAtual+"</p>"
@@ -1324,6 +1326,153 @@ function matHtml(){
         +"</td></tr>";
     }).join("")+"</tbody></table></div></div>":"");
 }
+// ===== FEEDBACKS (painel de acompanhamento +60 dias) =====
+var FEEDBACK_CICLO_DIAS=60;
+function _feedbackInfoAluno(a){
+  var fbs=(D.feedbacks||[]).filter(function(f){return f.aluno===a.nome;}).slice().sort(function(x,y){return x.data<y.data?-1:1;});
+  var qtd=fbs.length;
+  var ultimo=qtd>0?fbs[qtd-1]:null;
+  // Regra: se já existe pelo menos 1 feedback, o ciclo de 60 dias conta a partir do ÚLTIMO envio.
+  // Se o aluno nunca recebeu feedback (matrícula recente ou antiga sem registro), conta a partir da data da matrícula.
+  var baseData=ultimo?ultimo.data:(a.dataMatricula||"");
+  var proximo="";
+  if(baseData){
+    var dp=new Date(baseData+"T00:00:00");
+    dp.setDate(dp.getDate()+FEEDBACK_CICLO_DIAS);
+    proximo=fdISO(dp);
+  }
+  var hoje=fdISO(new Date());
+  var diasRestantes=proximo?Math.round((new Date(proximo+"T00:00:00")-new Date(hoje+"T00:00:00"))/86400000):null;
+  var status;
+  if(diasRestantes===null)status="semenvio";
+  else if(diasRestantes<0)status=qtd===0?"atrasado":"atrasado";
+  else if(diasRestantes<=7)status="embreve";
+  else status=qtd===0?"semenvio":"emdia";
+  return {aluno:a,fbs:fbs,qtd:qtd,ultimo:ultimo,proximo:proximo,diasRestantes:diasRestantes,status:status};
+}
+function setFeedbackAluno(v){feedbackAlunoSel=v;refreshContent();}
+function feedbacksDoMesCardHtml(){
+  var hoje=new Date();
+  var pfxMesReal=hoje.getFullYear()+"-"+String(hoje.getMonth()+1).padStart(2,"0");
+  var lista=ativos().map(_feedbackInfoAluno).filter(function(i){
+    if(!i.proximo)return false;
+    return i.proximo.slice(0,7)===pfxMesReal||i.status==="atrasado";
+  });
+  lista.sort(function(a,b){return a.proximo<b.proximo?-1:1;});
+  if(lista.length===0)return "";
+  var statusBadge={
+    atrasado:"<span class='badge br2'><i class='ti ti-alert-circle'></i> Atrasado</span>",
+    embreve:"<span class='badge bam'><i class='ti ti-clock'></i> Em breve</span>",
+    semenvio:"<span class='badge bpu'><i class='ti ti-message-circle-2'></i> Sem 1\u00ba envio</span>",
+    emdia:"<span class='badge bg'><i class='ti ti-check'></i> Em dia</span>"
+  };
+  var rows=lista.map(function(i){
+    return "<div class='ci' style='grid-template-columns:100px 1fr 130px'>"
+      +"<span style='font-weight:600'>"+fd(i.proximo)+"</span>"
+      +"<span>"+i.aluno.nome.split(" ").slice(0,2).join(" ")+"</span>"
+      +"<span>"+statusBadge[i.status]+"</span>"
+      +"</div>";
+  }).join("");
+  return "<div class='card' style='margin-bottom:16px'>"
+    +"<p class='ct'><i class='ti ti-message-circle-2'></i> Feedbacks a enviar este m\u00eas ("+lista.length+")</p>"
+    +"<div style='margin-bottom:10px'>"+rows+"</div>"
+    +"<button class='btn bsm' onclick=\"goTab('feedbacks')\"><i class='ti ti-arrow-right'></i> Ver todos em Feedbacks</button>"
+    +"</div>";
+}
+function abrirFeedbackAluno(nome){if(user.role==="Professora"){verHistoricoFeedback(nome);return;}editarMatricula(nome);setTimeout(function(){switchETab(2);},0);}
+function verHistoricoFeedback(nome){
+  var d=getDados(nome)||{};
+  var info=_feedbackInfoAluno({nome:nome,dataMatricula:d.dataMatricula||d.data||""});
+  var rows=info.fbs.length===0?"<p class='empty' style='padding:1rem'>Nenhum feedback registrado ainda.</p>"
+    :info.fbs.map(function(f,idx){
+      return "<div style='padding:8px 0;border-bottom:1px solid var(--br)'>"
+        +"<div style='display:flex;justify-content:space-between;align-items:center'>"
+        +"<span style='font-size:12px;font-weight:600'>"+(idx+1)+"\u00ba envio &middot; "+fd(f.data)+"</span>"
+        +"<span class='badge "+(f.prof==="Amanda"?"bb":"bpu")+"'>"+f.prof+"</span>"
+        +"</div>"
+        +"<p style='font-size:12px;color:var(--mt);margin-top:4px'>"+f.texto+"</p></div>";
+    }).join("");
+  var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\">"
+    +"<div class='modal'>"
+    +"<p class='modal-title'><i class='ti ti-message-circle-2' style='color:var(--brand2)'></i> Feedbacks &mdash; "+nome.split(" ").slice(0,2).join(" ")+"</p>"
+    +"<div style='max-height:320px;overflow-y:auto;margin-bottom:14px'>"+rows+"</div>"
+    +"<button class='btn' style='width:100%;justify-content:center' onclick='closeModal()'>Fechar</button>"
+    +"</div></div>";
+  document.getElementById("mc").innerHTML=html;
+}
+function feedbacksTabHtml(){
+  var canRegistrar=user.role!=="Professora";
+  var ordemPeso={atrasado:0,embreve:1,semenvio:2,emdia:3};
+  var todos=todosObj().map(_feedbackInfoAluno);
+  todos.forEach(function(i){i.cancelado=eCanc(i.aluno.nome);});
+  var lista=todos.slice();
+  if(feedbackAlunoSel)lista=lista.filter(function(i){return i.aluno.nome===feedbackAlunoSel;});
+  lista.sort(function(a,b){
+    if(a.cancelado!==b.cancelado)return a.cancelado?1:-1;
+    var pa=ordemPeso[a.status],pb=ordemPeso[b.status];
+    if(pa!==pb)return pa-pb;
+    var da=a.diasRestantes===null?9999:a.diasRestantes,db=b.diasRestantes===null?9999:b.diasRestantes;
+    if(da!==db)return da-db;
+    return a.aluno.nome<b.aluno.nome?-1:1;
+  });
+  var totAtrasado=0,totEmbreve=0,totSemenvio=0,totEmdia=0;
+  todos.filter(function(i){return!i.cancelado;}).forEach(function(i){
+    if(i.status==="atrasado")totAtrasado++;
+    else if(i.status==="embreve")totEmbreve++;
+    else if(i.status==="semenvio")totSemenvio++;
+    else totEmdia++;
+  });
+  var kpis="<div class='g4'>"
+    +"<div class='kpi'><div class='ka' style='background:var(--rd)'></div><p class='kl'>Atrasados</p><p class='kv' style='color:var(--rd)'>"+totAtrasado+"</p><p class='ks'>ciclo de "+FEEDBACK_CICLO_DIAS+" dias vencido</p></div>"
+    +"<div class='kpi'><div class='ka' style='background:var(--am)'></div><p class='kl'>Enviar em breve</p><p class='kv' style='color:var(--am)'>"+totEmbreve+"</p><p class='ks'>vence nos pr\u00f3ximos 7 dias</p></div>"
+    +"<div class='kpi'><div class='ka' style='background:var(--pu)'></div><p class='kl'>Sem 1\u00ba envio</p><p class='kv' style='color:var(--pu)'>"+totSemenvio+"</p><p class='ks'>nenhum feedback registrado</p></div>"
+    +"<div class='kpi'><div class='ka' style='background:var(--gn)'></div><p class='kl'>Em dia</p><p class='kv' style='color:var(--gn)'>"+totEmdia+"</p><p class='ks'>dentro do ciclo</p></div>"
+    +"</div>"
+    +"<p style='font-size:11px;color:var(--mt);margin:-8px 0 16px'>Os n\u00fameros acima consideram apenas alunos ativos.</p>";
+  var opcoesAluno=todos.slice().sort(function(a,b){return a.aluno.nome<b.aluno.nome?-1:1;})
+    .map(function(i){return "<option value='"+i.aluno.nome.replace(/'/g,"&#39;")+"'"+(feedbackAlunoSel===i.aluno.nome?" selected":"")+">"+i.aluno.nome.split(" ").slice(0,2).join(" ")+(i.cancelado?" (Cancelado)":"")+"</option>";}).join("");
+  var filtros="<div class='card' style='margin-bottom:16px'>"
+    +"<div class='fi' style='max-width:340px'><label>Selecionar aluno</label>"
+    +"<select onchange='setFeedbackAluno(this.value)'><option value=''>Todos os alunos ("+todos.length+")</option>"+opcoesAluno+"</select></div>"
+    +"</div>";
+  var statusMeta={
+    atrasado:{cor:"var(--rd)",bg:"var(--rl)",icon:"ti-alert-circle",label:"Atrasado"},
+    embreve:{cor:"var(--am)",bg:"var(--al)",icon:"ti-clock",label:"Enviar em breve"},
+    semenvio:{cor:"var(--pu)",bg:"var(--pl)",icon:"ti-message-circle-2",label:"Sem 1\u00ba envio"},
+    emdia:{cor:"var(--gn)",bg:"var(--gl)",icon:"ti-check",label:"Em dia"}
+  };
+  var acaoFn=canRegistrar?"abrirFeedbackAluno":"verHistoricoFeedback";
+  var rows=lista.map(function(i){
+    var nomeCurto=i.aluno.nome.split(" ").slice(0,2).join(" ");
+    var iniciais=i.aluno.nome.split(" ").slice(0,2).map(function(w){return w[0];}).join("").toUpperCase();
+    var meta=i.cancelado?{cor:"var(--mt)",bg:"var(--b3)",icon:"ti-x",label:"Cancelado"}:statusMeta[i.status];
+    var ultimoTxt=i.ultimo?fd(i.ultimo.data):"nenhum envio";
+    var subInfo="\u00daltimo: "+ultimoTxt+" &middot; "+i.qtd+"x no total";
+    var proximoBloco=(i.cancelado||!i.proximo)?"":
+      "<div style='text-align:center;flex-shrink:0'>"
+      +"<p style='font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:.04em;margin:0 0 2px'>Pr\u00f3ximo</p>"
+      +"<p style='font-size:16px;font-weight:800;color:"+meta.cor+";margin:0;white-space:nowrap'>"+fd(i.proximo)+"</p>"
+      +"</div>";
+    return "<div style='display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--br);cursor:pointer;transition:background .15s'"
+      +" onmouseenter=\"this.style.background='var(--b2)'\" onmouseleave=\"this.style.background=''\""
+      +" onclick=\""+acaoFn+"('"+i.aluno.nome.replace(/'/g,"\\'")+"')\">"
+      +"<div style='width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;background:"+meta.bg+";color:"+meta.cor+"'>"+iniciais+"</div>"
+      +"<div style='flex:1;min-width:0'>"
+      +"<p style='font-size:13px;font-weight:700;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"+nomeCurto+"</p>"
+      +"<p style='font-size:11px;color:var(--mt);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"+subInfo+"</p>"
+      +"</div>"
+      +proximoBloco
+      +"<span class='badge' style='background:"+meta.bg+";color:"+meta.cor+";flex-shrink:0'><i class='ti "+meta.icon+"'></i> "+meta.label+"</span>"
+      +"<button class='btn "+(canRegistrar?"bp":"")+" bsm' style='flex-shrink:0' onclick=\"event.stopPropagation();"+acaoFn+"('"+i.aluno.nome.replace(/'/g,"\\'")+"')\">"
+      +(canRegistrar?"<i class='ti ti-plus'></i>":"<i class='ti ti-eye'></i>")
+      +"</button>"
+      +"</div>";
+  }).join("");
+  return kpis+filtros
+    +(canRegistrar?"":"<div class='card' style='margin-bottom:16px;border-left:4px solid var(--brand2);background:var(--bl)'><p style='font-size:12px;color:var(--brand);margin:0'><i class='ti ti-info-circle'></i> Somente Catarina e Secretaria podem registrar o envio de um feedback. Esta tela é apenas para consulta.</p></div>")
+    +"<div class='card' style='padding:0;overflow:hidden'><p class='ct' style='padding:14px 16px 0'><i class='ti ti-message-circle-2'></i> Acompanhamento de feedbacks ("+lista.length+") <span style='font-size:11px;color:var(--mt);font-weight:400'>— ciclo de "+FEEDBACK_CICLO_DIAS+" dias &middot; clique no aluno para ver hist\u00f3rico"+(canRegistrar?" ou registrar um novo envio":"")+"</span></p>"
+    +"<div style='margin-top:10px'>"+(rows||"<p class='empty' style='padding:1.5rem'>Nenhum aluno encontrado.</p>")+"</div></div>";
+}
 function editarMatricula(nome){
   var d=getDados(nome);if(!d)return;
   var feedbacks=(D.feedbacks||[]).filter(function(f){return f.aluno===nome;});
@@ -1359,6 +1508,7 @@ function editarMatricula(nome){
           +"<span style='font-size:11px;color:var(--mt)'>"+h.plano+" &middot; "+BRL(h.valor)+"</span>"
           +"</div>"
           +"<button class='btn bsm' style='background:var(--bl);color:var(--brand2);border-color:var(--bl)' onclick=\"editarHistorico("+gIdx+",'"+nome.replace(/'/g,"\\'")+"')\"><i class='ti ti-edit'></i></button>"
+          +"<button class='btn bd bsm' onclick=\"excluirHistorico("+gIdx+",'"+nome.replace(/'/g,"\\'")+"')\" title='Excluir'><i class='ti ti-trash'></i></button>"
           +"</div></div>";
       }
       return "<div style='padding:10px 0;border-bottom:1px solid var(--br)'>"
@@ -1369,6 +1519,7 @@ function editarMatricula(nome){
         +"<div style='display:flex;align-items:center;gap:8px'>"
         +(isRenovacao?"<span style='font-size:11px;color:var(--mt)'>Renovado em "+fd(h.dataRenovacao)+"</span>":"")
         +"<button class='btn bsm' style='background:var(--bl);color:var(--brand2);border-color:var(--bl)' onclick=\"editarHistorico("+gIdx+",'"+nome.replace(/'/g,"\\'")+"')\"><i class='ti ti-edit'></i></button>"
+        +"<button class='btn bd bsm' onclick=\"excluirHistorico("+gIdx+",'"+nome.replace(/'/g,"\\'")+"')\" title='Excluir'><i class='ti ti-trash'></i></button>"
         +"</div></div>"
         +"<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:12px'>"
         +"<div><span style='color:var(--mt)'>Matrícula:</span><br><strong>"+(h.dataMatricula?fd(h.dataMatricula):"—")+"</strong></div>"
@@ -1457,6 +1608,13 @@ async function salvarEdicaoHistorico(idx,nome){
   h.plano=document.getElementById("hepl").value;
   h.valor=+document.getElementById("hev").value||h.valor;
   h.dataRenovacao=document.getElementById("hedr").value;
+  await saveHistoricoAll();
+  editarMatricula(nome);
+}
+async function excluirHistorico(idx,nome){
+  if(!confirm("Excluir este registro do histórico? Essa ação não pode ser desfeita."))return;
+  if(idx<0||idx>=D.historico.length)return;
+  D.historico.splice(idx,1);
   await saveHistoricoAll();
   editarMatricula(nome);
 }
@@ -2635,6 +2793,7 @@ var agendaView="calendario";var mesAgendaAtual=new Date().getMonth();var anoAgen
 function agendaHtml(){
   if(!D.agenda)D.agenda=[];
   var html="<div class='content'><div class='ct'><i class='ti ti-calendar-event'></i> Agenda de Aulas</div>";
+  if(user.role==="Professora")html+=feedbacksDoMesCardHtml();
   
   // === FILTRO DE MÊS ===
   var mesesNomes=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
