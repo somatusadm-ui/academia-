@@ -895,6 +895,7 @@ var NAV=[
   {id:"caixa",icon:"ti-wallet",label:"Caixa Aberto"},
   {id:"pagamentos",icon:"ti-cash",label:"Pagamentos"},
   {id:"matriculas",icon:"ti-user-plus",label:"Matr\u00edculas"},
+  {id:"experimentais",icon:"ti-flask",label:"Experimentais"},
   {id:"alunos",icon:"ti-users",label:"Alunos"},
   {id:"feedbacks",icon:"ti-message-circle-2",label:"Feedbacks"},
   {id:"contratos",icon:"ti-file-certificate",label:"Contratos"},
@@ -922,7 +923,7 @@ navAll.push({id:"relatorio",icon:"ti-file-export",label:"Relatório"});
   var caixaMes=D.caixa.filter(function(c){return c.dataVenc&&c.dataVenc.startsWith(pfx);});
   var pendC=caixaMes.filter(function(c){return!c.pago&&c.pago!=="true";}).length;
   var navH=navAll.map(function(n){
-    var dot=(n.id==="caixa"&&pendC>0);
+    var dot=(n.id==="caixa"&&pendC>0)||(n.id==="experimentais"&&pendExp>0);
     return "<button class='ni"+(tab===n.id?" active":"")+"' onclick=\"goTab('"+n.id+"')\">"
       +"<i class='ti "+n.icon+"'></i>"+n.label+(dot?"<span class='nd'></span>":"")+"</button>";
   }).join("");
@@ -953,6 +954,7 @@ function tabHtml(){
   if(tab==="caixa")return caixaHtml();
   if(tab==="pagamentos")return pagHtml();
   if(tab==="matriculas")return matHtml();
+  if(tab==="experimentais")return expHtml();
   if(tab==="feedbacks")return feedbacksTabHtml();
   if(tab==="contratos")return contratosHtml();
   if(tab==="agenda")return agendaHtml();
@@ -995,6 +997,92 @@ function semAutorizacaoImagemCardHtml(){
     +"<div class='img-widget-head'><i class='ti ti-camera-off'></i> Uso de imagem<span class='sidebar-badge' style='background:rgba(255,255,255,.28)'>"+lista.length+"</span></div>"
     +"<div class='img-widget-body'>"+body+"</div>"
     +"</div>";
+}
+// ===== AGENDA (painel — somente leitura, sem ações, com filtro de dia) =====
+// profFiltro: se informado (ex.: "Amanda"), mostra só as aulas dessa professora.
+var _painelAgendaData=null; // null = hoje; guarda "YYYY-MM-DD" quando a usuária escolhe outro dia
+function _painelAgendaDataAtual(){return _painelAgendaData||fdISO(new Date());}
+function mudarPainelAgendaDia(delta){
+  var d=new Date(_painelAgendaDataAtual()+"T12:00");
+  d.setDate(d.getDate()+delta);
+  _painelAgendaData=fdISO(d);
+  refreshContent();
+}
+function setPainelAgendaDia(v){if(!v)return;_painelAgendaData=v;refreshContent();}
+function resetPainelAgendaHoje(){_painelAgendaData=null;refreshContent();}
+function agendaHojeCardHtml(profFiltro){
+  var alvo=_painelAgendaDataAtual();
+  var isHoje=(alvo===fdISO(new Date()));
+  var lista=(D.agenda||[]).filter(function(a){
+    return a.data===alvo&&a.tipo!=="alerta_contrato"&&a.status!=="cancelado"&&(!profFiltro||a.professora===profFiltro);
+  }).sort(function(a,b){return (a.hora||"").localeCompare(b.hora||"");});
+  var dataFmt=new Date(alvo+"T12:00").toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"});
+  var body=lista.length===0
+    ? "<p class='empty' style='padding:10px 0;font-size:12px'>Nenhuma aula agendada"+(isHoje?" para hoje":" nesta data")+".</p>"
+    : "<div>"+lista.map(function(a){
+        var isExp=a.tipo==="experimental";
+        var presLabel=a.presenca==="presenca"?"<span class='badge bg' style='margin-left:6px'><i class='ti ti-check'></i> Presença</span>"
+          :a.presenca==="falta"?"<span class='badge br2' style='margin-left:6px'><i class='ti ti-x'></i> Falta</span>":"";
+        return "<div class='timeline-item "+(isExp?"tl-teal":"tl-blue")+"'>"
+          +"<p style='font-weight:700;font-size:12px;margin:0;display:flex;align-items:center;flex-wrap:wrap'>"+(a.hora||"—")+" &middot; "+a.aluno+presLabel+"</p>"
+          +"<p style='font-size:11px;color:var(--mt);margin:2px 0 0'>"+(isExp?"Experimental":"Aula fixa")+(profFiltro?"":" &middot; "+a.professora)+"</p>"
+          +"</div>";
+      }).join("")+"</div>";
+  return "<div class='card' style='margin-bottom:16px'>"
+    +"<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:2px'>"
+    +"<p class='ct' style='margin-bottom:0'><i class='ti ti-calendar-event'></i> "+(profFiltro?"Minha agenda":"Agenda")+(isHoje?" de hoje":"")+"</p>"
+    +"<div style='display:flex;align-items:center;gap:4px'>"
+    +"<button class='btn bsm' onclick='mudarPainelAgendaDia(-1)' title='Dia anterior'><i class='ti ti-chevron-left'></i></button>"
+    +"<input type='date' value='"+alvo+"' onchange='setPainelAgendaDia(this.value)' style='font-size:12px;padding:6px 8px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'>"
+    +"<button class='btn bsm' onclick='mudarPainelAgendaDia(1)' title='Próximo dia'><i class='ti ti-chevron-right'></i></button>"
+    +(isHoje?"":"<button class='btn bsm' onclick='resetPainelAgendaHoje()' title='Voltar para hoje'><i class='ti ti-calendar-check'></i> Hoje</button>")
+    +"</div></div>"
+    +"<p style='font-size:11px;color:var(--mt);margin:0 0 10px;text-transform:capitalize'>"+dataFmt+" &middot; "+lista.length+" aula(s)</p>"
+    +body
+    +"</div>";
+}
+// ===== EXPERIMENTAIS DO MÊS (painel — card compacto) =====
+// Fonte de verdade: aba Experimentais (D.exp) — os números aqui refletem exatamente
+// o que estiver marcado no Controle de alunos. "Fecharam" usa a DATA DE FECHAMENTO
+// (não a data da aula experimental), então um aluno que fez experimental em julho e
+// só fechou em agosto conta no painel de agosto — não no de julho.
+function resumoExperimentaisMesPainel(){
+  var pfx=mesAtualPfx();
+  var comPresenca=(D.exp||[]).filter(function(e){return e.presenca==="presenca"&&e.data&&e.data.startsWith(pfx);}).length;
+  var fecharam=(D.exp||[]).filter(function(e){
+    if(!(e.convertido===true||e.convertido==="true"))return false;
+    var dRef=e.dataFechamento||e.data; // fallback p/ registros antigos sem data de fechamento salva
+    return dRef&&dRef.startsWith(pfx);
+  }).length;
+  return {comPresenca:comPresenca,fecharam:fecharam};
+}
+function experimentaisMesCardHtml(){
+  var r=resumoExperimentaisMesPainel();
+  return "<div class='card painel-card-pro' style='margin-top:16px;margin-bottom:0'>"
+    +"<p class='painel-section-label'>Aulas experimentais</p>"
+    +"<div class='ct' style='margin-bottom:10px'><i class='ti ti-flask'></i> Este mês</div>"
+    +"<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px'>"
+    +"<div class='mini-stat' style='text-align:center'><p class='mini-stat-label'>Com presença</p><p class='mini-stat-value' style='font-size:22px;color:var(--brand2)'>"+r.comPresenca+"</p></div>"
+    +"<div class='mini-stat' style='text-align:center'><p class='mini-stat-label'>Fecharam matrícula</p><p class='mini-stat-value' style='font-size:22px;color:var(--gn)'>"+r.fecharam+"</p></div>"
+    +"</div></div>";
+}
+// ===== RESUMO DA PROFESSORA NO MÊS (painel Amanda — card compacto) =====
+function resumoProfessoraMesCardHtml(){
+  var pfx=mesAtualPfx();
+  var profNome=(user.name||"").replace("Professora ","").trim()||"Amanda";
+  var aulasDadas=(D.agenda||[]).filter(function(a){
+    return a.professora===profNome&&a.presenca==="presenca"&&a.data&&a.data.startsWith(pfx)&&a.tipo!=="alerta_contrato";
+  }).length;
+  var mov=_movimentacoesMes(pfx);
+  return "<div class='card painel-card-pro' style='margin-bottom:16px'>"
+    +"<p class='painel-section-label'>Este mês</p>"
+    +"<div class='ct' style='margin-bottom:10px'><i class='ti ti-chart-bar'></i> Meu resumo</div>"
+    +"<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px'>"
+    +"<div class='mini-stat' style='text-align:center'><p class='mini-stat-label'>Aulas dadas</p><p class='mini-stat-value' style='font-size:22px;color:var(--brand2)'>"+aulasDadas+"</p></div>"
+    +"<div class='mini-stat' style='text-align:center'><p class='mini-stat-label'>Matrículas novas</p><p class='mini-stat-value' style='font-size:22px;color:var(--gn)'>"+mov.novas+"</p></div>"
+    +"<div class='mini-stat' style='text-align:center'><p class='mini-stat-label'>Cancelamentos</p><p class='mini-stat-value' style='font-size:22px;color:var(--rd)'>"+mov.canceladas+"</p></div>"
+    +"<div class='mini-stat' style='text-align:center'><p class='mini-stat-label'>Renovações</p><p class='mini-stat-value' style='font-size:22px;color:var(--pu)'>"+mov.renovadas+"</p></div>"
+    +"</div></div>";
 }
 function painelHtml(){
   var pfx=mesAtualPfx();
@@ -1155,22 +1243,25 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
     +"</div>";
 
   if(user.role==="Professora"){
-    // Professora: banner de saudação (sem nenhum valor financeiro) + feedbacks do mês,
-    // com o alerta de uso de imagem num widget compacto ao lado.
+    // Professora: banner de saudação (sem nenhum valor financeiro) + agenda de hoje (só dela) +
+    // feedbacks do mês, com o resumo mensal (aulas dadas / matrículas / cancelamentos / renovações)
+    // e o alerta de uso de imagem numa coluna lateral compacta.
+    var profNomeAmanda=(user.name||"").replace("Professora ","").trim()||"Amanda";
     return heroSimplesHtml
       +"<div class='painel-2col'>"
-      +"<div>"+feedbacksDoMesCardHtml()+"</div>"
-      +"<div>"+semAutorizacaoImagemCardHtml()+"</div>"
+      +"<div>"+agendaHojeCardHtml(profNomeAmanda)+feedbacksDoMesCardHtml()+"</div>"
+      +"<div>"+resumoProfessoraMesCardHtml()+semAutorizacaoImagemCardHtml()+"</div>"
       +"</div>";
   }
 
   if(!isGestora){
-    // Secretária: banner de saudação (sem valores financeiros) + layout anterior,
-    // com o alerta de uso de imagem num widget compacto ao lado.
+    // Secretária: banner de saudação (sem valores financeiros) + resumo de experimentais e
+    // agenda (com filtro de dia) numa coluna lateral compacta — agenda é somente leitura,
+    // sem nenhuma ação disponível.
     return heroSimplesHtml
       +"<div class='painel-2col'>"
       +"<div>"+feedbacksDoMesCardHtml()+alertaHtml+resumoMensalHtml+"</div>"
-      +"<div>"+semAutorizacaoImagemCardHtml()+"</div>"
+      +"<div>"+semAutorizacaoImagemCardHtml()+experimentaisMesCardHtml()+"<div style='margin-top:16px'></div>"+agendaHojeCardHtml(null)+"</div>"
       +"</div>";
   }
 
@@ -1220,6 +1311,7 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
     +"<div class='ct' style='margin-bottom:8px'><i class='ti ti-chart-area-line'></i> Últimos 6 meses</div>"
     +"<div style='position:relative;height:190px'><canvas id='chartFatSem'></canvas></div>"
     +"</div>"
+    +experimentaisMesCardHtml()
     +"</div>";
 
   var colEsquerda=feedbacksDoMesCardHtml()+alertaHtml+htmlGrafico+resumoMensalHtmlGestora;
@@ -1649,7 +1741,7 @@ function matHtml(){
     +"<div class='fi'><label>Hor\u00e1rio</label><select id='mh'>"+hOpts+"</select></div>"
     +"<div class='fi'><label>Professora</label><select id='mpr'><option>Amanda</option><option>Nathalia</option></select></div></div>"
     +"<div class='fi' style='margin-bottom:10px'><label>Canal de aquisi\u00e7\u00e3o</label>"
-    +"<select id='mc2'><option>Instagram</option><option>Tr\u00e1fego Pago</option><option>Indica\u00e7\u00e3o</option><option>PAC Cl\u00ednica 1</option><option>PAC Cl\u00ednica 2</option><option>Outros</option></select></div>"
+    +"<select id='mc2'><option>Instagram</option><option>Instagram Luli</option><option>Tr\u00e1fego Pago</option><option>Indica\u00e7\u00e3o</option><option>PAC Cl\u00ednica 1</option><option>PAC Cl\u00ednica 2</option><option>Outros</option></select></div>"
     +"<div class='fi' style='margin-bottom:10px'><label>Autoriza uso de imagem?</label>"
     +"<select id='mimg'><option value='Sim'>Sim</option><option value='Não'>Não</option></select></div>"
     +"<button class='btn bp bf' onclick='saveMat()'><i class='ti ti-check'></i> Registrar matr\u00edcula</button></div>"
@@ -1893,7 +1985,7 @@ function editarMatricula(nome){
     +"<div class='fi'><label>Desconto (R$)</label><input type='number' id='edes' value='"+(d.desconto||0)+"' step='0.01'></div></div>"
     +"<div class='fi' style='margin-bottom:12px'><label>A\u00e7\u00e3o promocional</label><input type='text' id='epro' value='"+(d.promocao||"")+"' placeholder='Ex: Promo maio'></div>"
     +"<div class='fi' style='margin-bottom:12px'><label>Canal de aquisi\u00e7\u00e3o</label><select id='ecanal'>"
-    +["","Instagram","Tr\u00e1fego Pago","Indica\u00e7\u00e3o","PAC Cl\u00ednica 1","PAC Cl\u00ednica 2","Outros"].map(function(op){
+    +["","Instagram","Instagram Luli","Tr\u00e1fego Pago","Indica\u00e7\u00e3o","PAC Cl\u00ednica 1","PAC Cl\u00ednica 2","Outros"].map(function(op){
       return "<option value='"+op+"'"+((d.canal||"")===op?" selected":"")+">"+(op||"Selecione...")+"</option>";
     }).join("")
     +"</select></div>"
@@ -2435,13 +2527,102 @@ async function excluirEvento(idx){
 // ===== PRESENCA =====
 
 // ===== EXPERIMENTAIS =====
+// ===== CONTROLE DE ALUNOS EM EXPERIMENTAL (agrupado por aluno — visão geral, não filtra por mês) =====
+function _agruparExpPorAluno(){
+  var grupos={};
+  (D.exp||[]).forEach(function(e){
+    if(!e.nome)return;
+    if(!grupos[e.nome])grupos[e.nome]=[];
+    grupos[e.nome].push(e);
+  });
+  var lista=Object.keys(grupos).map(function(nome){
+    var sessoes=grupos[nome].slice().sort(function(a,b){return (a.data||"")<(b.data||"")?-1:((a.data||"")>(b.data||"")?1:0);});
+    var ultima=sessoes[sessoes.length-1];
+    var sessaoConvertida=sessoes.find(function(s){return s.convertido===true||s.convertido==="true";});
+    var convertido=!!sessaoConvertida;
+    var naoConvertido=!convertido&&(ultima.naoConvertido===true||ultima.naoConvertido==="true");
+    var status=convertido?"convertido":(naoConvertido?"naoConvertido":"pendente");
+    // Ação (Fechou/Alterar data/Não vai fechar) sempre atua na sessão convertida, se houver; senão na mais recente.
+    var sessaoAlvo=sessaoConvertida||ultima;
+    return {
+      nome:nome,
+      primeiraData:sessoes[0].data,
+      ultimaData:ultima.data,
+      qtd:sessoes.length,
+      canal:ultima.canal,
+      prof:ultima.prof,
+      presenca:ultima.presenca||"",
+      status:status,
+      dataFechamento:sessaoAlvo.dataFechamento||"",
+      ultimoIdx:D.exp.indexOf(sessaoAlvo)
+    };
+  });
+  lista.sort(function(a,b){return (b.ultimaData||"")<(a.ultimaData||"")?-1:((b.ultimaData||"")>(a.ultimaData||"")?1:0);});
+  return lista;
+}
+function alunosExperimentaisHtml(){
+  var lista=_agruparExpPorAluno();
+  if(lista.length===0)return "<div class='card'><p class='empty'><i class='ti ti-flask'></i> Nenhum aluno com aula experimental registrada ainda.</p></div>";
+  var statusInfo={
+    convertido:{label:"Fechou matrícula",badge:"bg",icon:"ti-check"},
+    naoConvertido:{label:"Não vai fechar",badge:"br2",icon:"ti-x"},
+    pendente:{label:"Ainda não fechou",badge:"bam",icon:"ti-clock"}
+  };
+  var presInfo={
+    presenca:"<span class='badge bg' style='margin-left:4px'><i class='ti ti-check'></i> Presente</span>",
+    falta:"<span class='badge br2' style='margin-left:4px'><i class='ti ti-x'></i> Faltou</span>",
+    "":"<span class='badge' style='margin-left:4px;background:var(--b2);color:var(--mt)'>Sem registro</span>"
+  };
+  var rows=lista.map(function(a){
+    var si=statusInfo[a.status];
+    var nomeEsc=String(a.nome).replace(/'/g,"\\'").replace(/"/g,"&quot;");
+    var fechInfo=a.status==="convertido"&&a.dataFechamento?"<div style='font-size:10px;color:var(--gn);margin-top:2px'>Fechou em "+fd(a.dataFechamento)+"</div>":"";
+    return "<tr>"
+      +"<td style='font-weight:600'>"+a.nome+"</td>"
+      +"<td>"+fd(a.primeiraData)+(a.qtd>1?" &rarr; "+fd(a.ultimaData):"")+"</td>"
+      +"<td>"+(a.qtd>1?"<span class='badge bb'><i class='ti ti-repeat'></i> "+a.qtd+"ª aulas</span>":"<span style='color:var(--mt);font-size:11px'>1ª aula</span>")+"</td>"
+      +"<td>"+(presInfo[a.presenca]||presInfo[""])+"</td>"
+      +"<td><span class='badge "+si.badge+"'><i class='ti "+si.icon+"'></i> "+si.label+"</span>"+fechInfo+"</td>"
+      +"<td style='display:flex;gap:4px;flex-wrap:wrap;padding:6px 0'>"
+      +(a.presenca!=="presenca"?"<button class='btn bsm' style='background:#2E8FB3;color:#fff;border:none' onclick='marcarPresencaExp("+a.ultimoIdx+",\"presenca\")'><i class='ti ti-check'></i> Presença</button>":"")
+      +(a.presenca!=="falta"?"<button class='btn bsm' style='background:#D32F2F;color:#fff;border:none' onclick='marcarPresencaExp("+a.ultimoIdx+",\"falta\")'><i class='ti ti-x'></i> Falta</button>":"")
+      +(a.status!=="convertido"?"<button class='btn bs bsm' onclick='converterExpComData("+a.ultimoIdx+")'><i class='ti ti-check'></i> Fechou</button>":"<button class='btn bsm' onclick='converterExpComData("+a.ultimoIdx+")'><i class='ti ti-edit'></i> Alterar data</button>")
+      +(a.status==="pendente"?"<button class='btn bd bsm' onclick='convExp("+a.ultimoIdx+",false)'><i class='ti ti-x'></i> Não vai fechar</button>":"")
+      +"<button class='btn bsm' onclick='novaAulaExpParaAluno(\""+nomeEsc+"\")'><i class='ti ti-plus'></i> Nova aula</button>"
+      +"</td></tr>";
+  }).join("");
+  return "<div class='card'><p class='ct'><i class='ti ti-users'></i> Controle de alunos — experimental <span style='font-size:11px;font-weight:400;color:var(--mt)'>("+lista.length+")</span></p>"
+    +"<p style='font-size:11px;color:var(--mt);margin:-6px 0 12px'>Visão geral de todos os alunos que já fizeram experimental, de qualquer mês — marque presença e resultado por aqui. Ao marcar \"Fechou\", informe a data real do fechamento: é essa data que os pain\\u00e9is da Catarina e da Secretaria usam para contar o mês.</p>"
+    +"<div class='ox'><table><thead><tr><th>Nome</th><th>Data(s)</th><th>Sess\\u00f5es</th><th>Presença</th><th>Status</th><th>Ações</th></tr></thead><tbody>"+rows+"</tbody></table></div>"
+    +"</div>";
+}
+function novaAulaExpParaAluno(nome){
+  var campo=document.getElementById("en");
+  if(!campo)return;
+  campo.value=nome;
+  var dataCampo=document.getElementById("ed");
+  if(dataCampo)dataCampo.value=fdISO(new Date());
+  campo.scrollIntoView({behavior:"smooth",block:"center"});
+  campo.focus();
+}
+// Pede a data real de fechamento (pode ser em outro mês, diferente do mês da aula experimental)
+// e só então marca o aluno como convertido — é essa data que alimenta os painéis.
+function converterExpComData(i){
+  if(!D.exp[i])return;
+  var def=D.exp[i].dataFechamento||fdISO(new Date());
+  var r=prompt("Data em que a matrícula foi fechada (AAAA-MM-DD):",def);
+  if(r===null)return; // cancelou
+  var v=String(r).trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(v)){alert("Data inválida. Use o formato AAAA-MM-DD.");return;}
+  convExp(i,true,v);
+}
 function expHtml(){
   if(!mesAtualExp){var _d=new Date();mesAtualExp=String(_d.getMonth()+1).padStart(2,"0")+"/"+_d.getFullYear();}
   var _ma=mesAtualExp.split("/"),_pm=String(+_ma[0]).padStart(2,"0"),_pa=_ma[1];
   var pfxExp=_pa+"-"+_pm+"-";
   
-  var pend=D.exp.filter(function(e){return!e.convertido&&!e.naoConvertido&&e.data.startsWith(pfxExp);});
-  var conv=D.exp.filter(function(e){return(e.convertido===true||e.convertido==="true")&&e.data.startsWith(pfxExp);}).length;
+  var pendCount=D.exp.filter(function(e){return!e.convertido&&!e.naoConvertido&&e.data.startsWith(pfxExp);}).length;
+  var conv=D.exp.filter(function(e){return(e.convertido===true||e.convertido==="true")&&(e.dataFechamento||e.data).startsWith(pfxExp);}).length;
   var nc=D.exp.filter(function(e){return(e.naoConvertido===true||e.naoConvertido==="true")&&e.data.startsWith(pfxExp);}).length;
   var tot=D.exp.filter(function(e){return e.data.startsWith(pfxExp);}).length,taxa=tot>0?Math.round(conv/tot*100):0;
   
@@ -2453,46 +2634,37 @@ function expHtml(){
     return "<option value='"+val+"'"+(mesAtualExp===val?" selected":"")+">"+lbl+"</option>";
   }).join("");
   
-  var rP=pend.map(function(e){
-    var ri=D.exp.indexOf(e);
-    return "<tr><td style='font-weight:600'>"+e.nome+"</td><td>"+fd(e.data)+"</td>"
-      +"<td><span class='badge btl'>"+e.canal+"</span></td><td>"+e.prof+"</td>"
-      +"<td style='font-size:11px;color:var(--mt)'>"+(e.obs||"&#8212;")+"</td>"
-      +"<td style='display:flex;gap:4px;padding:6px 0'>"
-      +"<button class='btn bs bsm' onclick='convExp("+ri+",true)'><i class='ti ti-check'></i> Converter</button>"
-      +"<button class='btn bd' onclick='convExp("+ri+",false)'><i class='ti ti-x'></i> Não</button>"
-      +"</td></tr>";
-  }).join("");
+  var presLabelMini={presenca:"<span class='badge bg' style='margin-left:4px'>Presente</span>",falta:"<span class='badge br2' style='margin-left:4px'>Faltou</span>","":""};
   var rA=D.exp.filter(function(e){return e.data.startsWith(pfxExp);}).map(function(e){
     var idx=D.exp.indexOf(e);
-    var s=e.convertido===true||e.convertido==="true"?"<span class='badge bg'>Convertido</span>"
+    var s=e.convertido===true||e.convertido==="true"?"<span class='badge bg'>Convertido</span>"+(e.dataFechamento?" <span style='font-size:10px;color:var(--mt)'>em "+fd(e.dataFechamento)+"</span>":"")
       :e.naoConvertido===true||e.naoConvertido==="true"?"<span class='badge br2'>Não convertido</span>"
       :"<span class='badge bam'>Pendente</span>";
-    return "<tr><td style='font-weight:600'>"+e.nome+"</td><td>"+fd(e.data)+"</td><td><span class='badge btl'>"+e.canal+"</span></td><td>"+e.prof+"</td><td>"+s+"</td><td style='display:flex;gap:4px'>"
-      +(e.naoConvertido===true||e.naoConvertido==="true"?"":" <button class='btn bs bsm' onclick='convExp("+idx+",true)'><i class='ti ti-check'></i> Conv</button>")
+    return "<tr><td style='font-weight:600'>"+e.nome+(presLabelMini[e.presenca||""]||"")+"</td><td>"+fd(e.data)+"</td><td><span class='badge btl'>"+e.canal+"</span></td><td>"+e.prof+"</td><td>"+s+"</td><td style='display:flex;gap:4px'>"
+      +(e.naoConvertido===true||e.naoConvertido==="true"?"":" <button class='btn bs bsm' onclick='converterExpComData("+idx+")'><i class='ti ti-check'></i> Conv</button>")
       +"<button class='btn bd bsm' onclick='delExp("+idx+")'><i class='ti ti-trash'></i></button></td></tr>";
   }).join("");
-  return "<div style='margin-bottom:16px'><div class='fi' style='max-width:150px'><label>Mês</label>"
+  return alunosExperimentaisHtml()
+    +"<div style='margin:16px 0'><div class='fi' style='max-width:150px'><label>Mês</label>"
     +"<select onchange='setMesExp(this.value);refreshContent()'>"+opts_exp+"</select></div></div>"
     +"<div class='g2'>"
     +"<div class='card c0'><p class='ct'><i class='ti ti-plus'></i> Registrar experimental</p>"
     +"<div id='ea'></div>"
     +"<div class='fr'><div class='fi'><label>Nome</label><input type='text' id='en'></div>"
     +"<div class='fi'><label>Data</label><input type='date' id='ed'></div></div>"
-    +"<div class='fr'><div class='fi'><label>Canal</label><select id='ec'><option>Instagram</option><option>Tráfego Pago</option><option>Indicação</option><option>PAC Clínica 1</option><option>PAC Clínica 2</option><option>Outros</option></select></div>"
+    +"<div class='fr'><div class='fi'><label>Canal</label><select id='ec'><option>Instagram</option><option>Instagram Luli</option><option>Tráfego Pago</option><option>Indicação</option><option>PAC Clínica 1</option><option>PAC Clínica 2</option><option>Outros</option></select></div>"
     +"<div class='fi'><label>Professora</label><select id='ep'><option>Amanda</option><option>Nathalia</option></select></div></div>"
     +"<div class='fi' style='margin-bottom:10px'><label>Observações</label><input type='text' id='eo' placeholder='Interesse, plano...'></div>"
     +"<button class='btn bp bf' onclick='saveExp()'><i class='ti ti-check'></i> Registrar</button></div>"
-    +"<div class='card c0'><p class='ct'><i class='ti ti-chart-bar'></i> Taxa de conversão — "+mesAtualExp+"</p>"
+    +"<div class='card c0'><p class='ct'><i class='ti ti-chart-bar'></i> Geral do mês — "+mesAtualExp+"</p>"
+    +"<p style='font-size:11px;color:var(--mt);margin:-6px 0 10px'>Atualizado automaticamente com base no Controle geral acima.</p>"
     +"<p style='font-size:40px;font-weight:700;color:var(--pu);line-height:1;margin-bottom:8px'>"+taxa+"%</p>"
     +"<div class='pw' style='margin-bottom:14px'><div class='pb' style='width:"+taxa+"%;background:var(--pu)'></div></div>"
-    +"<div class='sr'><span class='sl'>Total</span><span class='sv'>"+tot+"</span></div>"
-    +"<div class='sr'><span class='sl'>Convertidos</span><span class='sv' style='color:var(--gn)'>"+conv+"</span></div>"
+    +"<div class='sr'><span class='sl'>Aulas experimentais no mês</span><span class='sv'>"+tot+"</span></div>"
+    +"<div class='sr'><span class='sl'>Fecharam matrícula (por data de fechamento)</span><span class='sv' style='color:var(--gn)'>"+conv+"</span></div>"
     +"<div class='sr'><span class='sl'>Não convertidos</span><span class='sv' style='color:var(--rd)'>"+nc+"</span></div>"
-    +"<div class='sr'><span class='sl'>Aguardando</span><span class='sv' style='color:var(--am)'>"+pend.length+"</span></div>"
+    +"<div class='sr'><span class='sl'>Ainda aguardando</span><span class='sv' style='color:var(--am)'>"+pendCount+"</span></div>"
     +"</div></div>"
-    +(pend.length>0?"<div class='card'><p class='ct' style='color:var(--am)'><i class='ti ti-alert-triangle'></i> Pendentes ("+pend.length+")</p>"
-    +"<div class='ox'><table><thead><tr><th>Nome</th><th>Data</th><th>Canal</th><th>Prof.</th><th>Obs.</th><th>Resultado</th></tr></thead><tbody>"+rP+"</tbody></table></div></div>":"")
     +"<div class='card'><p class='ct'><i class='ti ti-history'></i> "+mesAtualExp+"</p>"
     +"<div class='ox'><table><thead><tr><th>Nome</th><th>Data</th><th>Canal</th><th>Prof.</th><th>Status</th><th>Ações</th></tr></thead><tbody>"+rA+"</tbody></table></div>"
     +"</div>";
@@ -2501,15 +2673,26 @@ async function saveExp(){
   if(!_umaVez("saveExp"))return; // ignora duplo clique
   var nome=document.getElementById("en").value.trim(),data=document.getElementById("ed").value;
   if(!nome||!data){alert2("ea","Preencha nome e data.",false);return;}
-  var obj={nome:nome,data:data,canal:document.getElementById("ec").value,prof:document.getElementById("ep").value,obs:document.getElementById("eo").value,convertido:false,naoConvertido:false};
+  var obj={nome:nome,data:data,canal:document.getElementById("ec").value,prof:document.getElementById("ep").value,obs:document.getElementById("eo").value,convertido:false,naoConvertido:false,presenca:"",dataFechamento:""};
   D.exp.push(obj);
-  var h=["nome","data","canal","prof","obs","convertido","naoConvertido"];
+  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento"];
   await push("experimentais",h,h.map(function(k){return String(obj[k]||"");}));
   alert2("ea","Registrado!",true);setTimeout(function(){refreshContent();},800);
 }
-async function convExp(i,conv){
+// conv=true/false. dataFech: data real do fechamento (opcional — usada quando conv=true).
+async function convExp(i,conv,dataFech){
+  if(!D.exp[i])return;
   D.exp[i].convertido=conv;D.exp[i].naoConvertido=!conv;
-  var h=["nome","data","canal","prof","obs","convertido","naoConvertido"];
+  D.exp[i].dataFechamento=conv?(dataFech||D.exp[i].dataFechamento||fdISO(new Date())):"";
+  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento"];
+  var rows=D.exp.map(function(e){return h.map(function(k){return String(e[k]||"");});});
+  dbSave("exp",function(){rewriteAba("experimentais",h,rows);});
+  refreshContent();
+}
+async function marcarPresencaExp(i,val){
+  if(!D.exp[i])return;
+  D.exp[i].presenca=(D.exp[i].presenca===val)?"":val; // clique de novo no mesmo status desmarca
+  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento"];
   var rows=D.exp.map(function(e){return h.map(function(k){return String(e[k]||"");});});
   dbSave("exp",function(){rewriteAba("experimentais",h,rows);});
   refreshContent();
@@ -2517,7 +2700,7 @@ async function convExp(i,conv){
 async function delExp(i){
   if(!confirm("Excluir aula experimental de "+D.exp[i].nome+"?"))return;
   D.exp.splice(i,1);
-  var h=["nome","data","canal","prof","obs","convertido","naoConvertido"];
+  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento"];
   var rows=D.exp.map(function(e){return h.map(function(k){return String(e[k]||"");});});
   dbSave("exp",function(){rewriteAba("experimentais",h,rows.length?rows:[]);});
   refreshContent();
