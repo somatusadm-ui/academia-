@@ -1214,7 +1214,13 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
             +"<div style='font-size:10px;margin-top:4px;color:"+(urgente?"#FF6F00":"var(--brand2)")+";font-weight:600'>"+(diasRest===0?"Vence hoje":diasRest+" dia(s)")+"</div>"
             +"</div>";
         }).join(""))
-    +"</div></div>";
+    +"</div>"
+    +"<div class='card painel-card-pro' style='margin-top:16px;margin-bottom:0'>"
+    +"<p class='painel-section-label'>Faturamento semestral</p>"
+    +"<div class='ct' style='margin-bottom:8px'><i class='ti ti-chart-area-line'></i> Últimos 6 meses</div>"
+    +"<div style='position:relative;height:190px'><canvas id='chartFatSem'></canvas></div>"
+    +"</div>"
+    +"</div>";
 
   var colEsquerda=feedbacksDoMesCardHtml()+alertaHtml+htmlGrafico+resumoMensalHtmlGestora;
   return heroHtml
@@ -3322,7 +3328,54 @@ function refreshContent(shallow){
   }
 }
 function attachAll(){attachTabEvents();}
+// ===== GRÁFICO: FATURAMENTO SEMESTRAL (painel Gestora) =====
+var _chartFatSem=null;
+function renderGraficoFatSem(){
+  var cv=document.getElementById("chartFatSem");
+  if(!cv)return;
+  if(typeof Chart==="undefined")return;
+  try{
+    var meses=[],bruto=[],liquido=[];
+    var nomes=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+    var hoje=new Date();
+    for(var i=5;i>=0;i--){
+      var d=new Date(hoje.getFullYear(),hoje.getMonth()-i,1);
+      var pfx=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-";
+      var b=0,l=0;
+      (D.pag||[]).forEach(function(p){
+        if(p.data&&String(p.data).startsWith(pfx)){b+=(+p.bruto||0);l+=(+p.liquido||0);}
+      });
+      meses.push(nomes[d.getMonth()]);
+      bruto.push(Math.round(b*100)/100);
+      liquido.push(Math.round(l*100)/100);
+    }
+    if(_chartFatSem){try{_chartFatSem.destroy();}catch(_e){}_chartFatSem=null;}
+    _chartFatSem=new Chart(cv.getContext("2d"),{
+      type:"line",
+      data:{
+        labels:meses,
+        datasets:[
+          {label:"Bruto",data:bruto,borderColor:"#2E8FB3",backgroundColor:"rgba(46,143,179,.22)",fill:true,tension:.4,pointRadius:3.5,pointBackgroundColor:"#2E8FB3",borderWidth:2},
+          {label:"Líquido",data:liquido,borderColor:"#7CB342",backgroundColor:"rgba(124,179,66,.25)",fill:true,tension:.4,pointRadius:3.5,pointBackgroundColor:"#7CB342",borderWidth:2}
+        ]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        interaction:{mode:"index",intersect:false},
+        plugins:{
+          legend:{position:"top",align:"end",labels:{boxWidth:10,boxHeight:10,usePointStyle:true,pointStyle:"circle",font:{size:10},color:"#7A8FA3"}},
+          tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+": "+(typeof BRL==="function"?BRL(ctx.parsed.y):"R$ "+ctx.parsed.y);}}}
+        },
+        scales:{
+          x:{grid:{display:false},ticks:{font:{size:10},color:"#7A8FA3"}},
+          y:{beginAtZero:true,grid:{color:"rgba(122,143,163,.12)"},ticks:{font:{size:9},color:"#7A8FA3",callback:function(v){return v>=1000?("R$ "+(v/1000)+"k"):("R$ "+v);}}}
+        }
+      }
+    });
+  }catch(e){console.warn("Gráfico faturamento semestral:",e);}
+}
 function attachTabEvents(){
+  renderGraficoFatSem(); // gráfico do painel (só desenha se o canvas existir)
   var ap=document.getElementById("apr");if(ap)ap.addEventListener("change",toggleProf);
   var ta=document.getElementById("ata");if(ta){ta.addEventListener("change",calcAm);calcAm();}
   var tn=document.getElementById("atn");if(tn)tn.addEventListener("change",calcNat);
