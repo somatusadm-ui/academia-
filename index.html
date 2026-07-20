@@ -163,6 +163,62 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--b2)}
 .cont-row{display:grid;grid-template-columns:1fr 80px 80px 90px 100px 160px;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--br);font-size:12px}
 .cont-row:hover{background:var(--b2)}
 .cont-h{font-weight:600;color:var(--mt);font-size:11px;text-transform:uppercase;background:var(--b2)}
+/* ===== POLIMENTO VISUAL (auditoria 20/07 — apenas aditivo) ===== */
+::selection{background:rgba(46,143,179,.22)}
+*{scrollbar-width:thin;scrollbar-color:#B9C6D2 transparent}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#C3CFDA;border-radius:8px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:#9FB0BF;border:2px solid transparent;background-clip:content-box}
+:focus-visible{outline:2px solid var(--brand2);outline-offset:2px;border-radius:4px}
+.btn:active{transform:translateY(0) scale(.98)}
+.ni:active{transform:translateX(0) scale(.98)}
+.kv,.mini-stat-value,.painel-hero-stat-value,.kpi-value{font-variant-numeric:tabular-nums}
+td,.sv{font-variant-numeric:tabular-nums}
+@keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.lcard{animation:cardIn .35s ease}
+.lcard input:focus,.lcard select:focus{border-color:var(--brand2)!important;box-shadow:0 0 0 3px rgba(46,143,179,.14)}
+input:disabled,select:disabled,textarea:disabled{opacity:.6;cursor:not-allowed}
+.badge,.chip,.mbadge{white-space:nowrap}
+.empty i{display:block;font-size:26px;margin-bottom:8px;opacity:.5}
+/* Responsivo: telas médias — sidebar só com ícones */
+@media(max-width:900px){
+  .sb{width:64px}
+  .main{margin-left:64px}
+  .ni{font-size:0;justify-content:center;gap:0;padding:12px 8px}
+  .ni i{font-size:19px;width:auto}
+  .nd{position:absolute;margin-left:22px;margin-top:-14px}
+  .ni{position:relative}
+  .sblt{font-size:0}.sblt i{font-size:20px}
+  .sbls,.sbsc{display:none}
+  .sbl{padding:18px 0;text-align:center}
+  .un,.ur{display:none}
+  .uc{justify-content:center;padding:9px 4px}
+  .blo{margin-left:0}
+  .sbb{padding:10px 6px}
+  .kg,.g4{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:1fr 1fr}
+  .content{padding:16px}
+  .topbar{padding:12px 16px}
+  .fr4{grid-template-columns:1fr 1fr}
+}
+/* Responsivo: celular */
+@media(max-width:560px){
+  .kg,.g2,.g3,.g4,.fr,.fr3,.fr4{grid-template-columns:1fr}
+  .painel-hero{padding:18px 16px}
+  .painel-hero-stats{width:100%}
+  .painel-hero-stat{flex:1;text-align:left;min-width:0}
+  .card{padding:14px 14px}
+  .tabs{width:100%}
+}
+/* Impressão da tela principal: esconde navegação */
+@media print{
+  .sb,.topbar,.btn,.tabs{display:none!important}
+  .main{margin-left:0}
+  body{background:#fff}
+  .card,.kpi{box-shadow:none;break-inside:avoid}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -453,10 +509,41 @@ async function rewriteAba(aba, headers, rows){
   return false;
 }
 // ===== BACKUP LOCAL (localStorage) =====
+// Auditoria 20/07: além do backup principal (ge2_backup_v1), mantém um HISTÓRICO
+// rotativo de até 6 snapshots (mín. 10 min de intervalo), para recuperar um estado
+// anterior caso o backup mais recente já contenha um erro (ex.: exclusão indevida).
 function _backupLocal(){
-  try{localStorage.setItem("ge2_backup_v1",JSON.stringify({t:Date.now(),D:D}));}
+  var snap;
+  try{snap=JSON.stringify({t:Date.now(),D:D});}
+  catch(e){console.warn("backup local falhou (serialização):",e);return;}
+  try{localStorage.setItem("ge2_backup_v1",snap);}
   catch(e){console.warn("backup local falhou:",e);}
+  // Histórico rotativo (só se o snapshot não for grande demais p/ a cota do navegador)
+  try{
+    if(snap.length>1500000)return; // ~1.5MB por snapshot: acima disso, mantém só o principal
+    var hist=[];
+    try{hist=JSON.parse(localStorage.getItem("ge2_backup_hist")||"[]");}catch(_e){hist=[];}
+    if(!Array.isArray(hist))hist=[];
+    var agora=Date.now();
+    var ultimo=hist.length?hist[hist.length-1].t:0;
+    if(agora-ultimo<10*60*1000)return; // espaça snapshots em 10 min
+    hist.push({t:agora,D:D});
+    while(hist.length>6)hist.shift();
+    localStorage.setItem("ge2_backup_hist",JSON.stringify(hist));
+  }catch(e){
+    // Cota estourada: descarta o histórico para garantir o backup principal
+    try{localStorage.removeItem("ge2_backup_hist");}catch(_e){}
+    console.warn("histórico de backup local indisponível:",e);
+  }
 }
+// Backup automático periódico (a cada 4 min, se logada e com dados carregados)
+setInterval(function(){
+  try{if(user&&syncOk)_backupLocal();}catch(_e){}
+},4*60*1000);
+// Backup ao sair da aba/minimizar (momento clássico de perda de dados)
+document.addEventListener("visibilitychange",function(){
+  try{if(document.visibilityState==="hidden"&&user)_backupLocal();}catch(_e){}
+});
 function baixarBackup(){
   var blob=new Blob([JSON.stringify({t:Date.now(),D:D},null,1)],{type:"application/json"});
   var a=document.createElement("a");
@@ -469,9 +556,32 @@ function restaurarBackupLocal(){
   if(!raw){alert("Nenhum backup local encontrado neste navegador.");return;}
   try{
     var b=JSON.parse(raw);
-    var dt=new Date(b.t).toLocaleString("pt-BR");
+    // Monta a lista de opções: [0] = mais recente + histórico rotativo (se houver)
+    var opcoes=[b];
+    try{
+      var hist=JSON.parse(localStorage.getItem("ge2_backup_hist")||"[]");
+      if(Array.isArray(hist)){
+        for(var i=hist.length-1;i>=0;i--){
+          if(hist[i]&&hist[i].t!==b.t)opcoes.push(hist[i]);
+        }
+      }
+    }catch(_e){}
+    var escolha=b;
+    if(opcoes.length>1){
+      var msg="Backups disponíveis neste navegador:\n";
+      for(var j=0;j<opcoes.length;j++){
+        msg+=j+" — "+new Date(opcoes[j].t).toLocaleString("pt-BR")+(j===0?" (mais recente)":"")+"\n";
+      }
+      msg+="\nDigite o número do backup que deseja restaurar:";
+      var resp=prompt(msg,"0");
+      if(resp===null)return;
+      var idx=parseInt(resp,10);
+      if(isNaN(idx)||idx<0||idx>=opcoes.length){alert("Opção inválida.");return;}
+      escolha=opcoes[idx];
+    }
+    var dt=new Date(escolha.t).toLocaleString("pt-BR");
     if(!confirm("Restaurar o backup local de "+dt+"?\nOs dados na tela serão substituídos pelos do backup (o Google Sheets NÃO é alterado até você salvar algo)."))return;
-    D=b.D;
+    D=escolha.D;
     Object.keys(D).forEach(function(k){if(!Array.isArray(D[k]))D[k]=[];});
     refreshContent();
     alert("Backup de "+dt+" restaurado na tela.");
@@ -3169,6 +3279,26 @@ function exportPDFCaixa(){ exportPDF("caixa"); }
 function goTab(t2){tab=t2;render();attachAll();}
 function setSubTab(s){subTab=s;refreshContent();}
 function logout(){user=null;render();}
+// ===== SEGURANÇA DE SESSÃO (auditoria 20/07) =====
+// Escape de HTML — disponível para uso em campos de texto livre exibidos na tela
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
+// Logout automático após 45 min sem interação (protege dados em computador compartilhado)
+var _idleTimer=null,_IDLE_MS=45*60*1000;
+function _idleReset(){
+  if(_idleTimer)clearTimeout(_idleTimer);
+  _idleTimer=setTimeout(_idleLogout,_IDLE_MS);
+}
+function _idleLogout(){
+  if(!user)return;
+  // Se há salvamentos pendentes (debounce), adia 60s para não interromper gravação
+  if(Object.keys(_dbt).length){_idleTimer=setTimeout(_idleLogout,60*1000);return;}
+  _backupLocal();
+  user=null;render();
+  try{alert("Sessão encerrada por inatividade (45 min).\nSeus dados foram salvos e um backup local foi feito. Faça login novamente.");}catch(_e){}
+}
+["click","keydown","touchstart","scroll"].forEach(function(ev){
+  document.addEventListener(ev,function(){if(user)_idleReset();},{passive:true});
+});
 async function recarregar(){showLov(true);await syncAll();refreshContent();showLov(false);}
 function resetMesesIfChanged(){
   var _d=new Date(),_mAtual=String(_d.getMonth()+1).padStart(2,"0")+"/"+_d.getFullYear();
