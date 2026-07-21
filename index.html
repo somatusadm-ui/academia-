@@ -612,6 +612,23 @@ function saveCancelados(){dbSave("canc",_saveCanceladosNow);}
 // ===== HELPERS DE DATA/HORA (fuso local, sem UTC) =====
 // Formata Date -> "YYYY-MM-DD" no fuso LOCAL (toISOString usa UTC e vira o dia errado apos as 21h no Brasil)
 function fdISO(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+// Cor da aula na agenda, por professora. Lilian tem cor própria (diferente de Amanda),
+// tanto para aulas fixas quanto para experimentais dela. Amanda/Nathalia mantêm a regra
+// antiga: experimental sempre verde, fixo por professora.
+function corProf(prof,tipo){
+  if(prof==="Lilian")return tipo==="experimental"?"#D4A017":"#9C7FD1";
+  if(tipo==="experimental")return "#7CB342";
+  return prof==="Amanda"?"#2E8FB3":"#5E35B1";
+}
+// Data limite (60 dias após a aula experimental) para decidir matrícula/não fechamento.
+function calcPrazoExp(dataBase){
+  if(!dataBase)return "";
+  var p=String(dataBase).substring(0,10).split("-");
+  if(p.length<3)return "";
+  var d=new Date(+p[0],+p[1]-1,+p[2]);
+  d.setDate(d.getDate()+60);
+  return fdISO(d);
+}
 // Parse "YYYY-MM-DD" (ou dd/mm/yyyy) -> Date a meia-noite LOCAL (new Date("YYYY-MM-DD") interpreta como UTC e volta 1 dia)
 function pdl(s){
   if(s instanceof Date)return s;
@@ -2454,7 +2471,7 @@ function abrirNovoEvento(data,hora){
     +"<select id='agn' onchange='checkOutroAluno()'>"+alunosOpts+"</select></div>"
     +"<div id='ag-outro' class='fi' style='display:none;margin-bottom:10px'><label>Nome personalizado</label><input type='text' id='agno' placeholder='Nome'></div>"
     +"<div class='fi' style='margin-bottom:10px'><label>Professora</label>"
-    +"<select id='agp'><option>Amanda</option><option>Nathalia</option></select></div>"
+    +"<select id='agp'><option>Amanda</option><option>Nathalia</option><option>Lilian</option></select></div>"
     +"<div class='fi' style='margin-bottom:14px'><label>Observa\u00e7\u00e3o</label><input type='text' id='ago' placeholder='Opcional'></div>"
     +"<div style='display:flex;gap:8px'>"
     +"<button class='btn bp' style='flex:1;justify-content:center' onclick='salvarEvento()'><i class='ti ti-check'></i> Adicionar</button>"
@@ -2474,7 +2491,7 @@ async function salvarEvento(){
   if(!D.agenda)D.agenda=[];
   var jaExiste=D.agenda.some(function(a){return a.aluno===nome&&a.data===data&&a.hora===hora;});
   if(!jaExiste){
-    var cor=(prof==="Amanda"?"#2E8FB3":"#5E35B1");
+    var cor=corProf(prof,"individual");
     D.agenda.push({aluno:nome,data:data,hora:hora,duracao:60,professora:prof,tipo:"individual",frequencia:"avulso",dataFim:"",status:"ativo",notas:obs,cor:cor,presenca:""});
   }
   await saveAgenda();
@@ -2489,7 +2506,7 @@ function editarEvento(idx){
     +"<div class='fi'><label>Hor\u00e1rio</label><input type='time' id='agh' value='"+ev.hora+"' step='1800'></div></div>"
     +"<div class='fi' style='margin-bottom:10px'><label>Nome</label><input type='text' id='agno' value='"+ev.nome+"'></div>"
     +"<div class='fi' style='margin-bottom:10px'><label>Professora</label>"
-    +"<select id='agp'><option"+(ev.prof==="Amanda"?" selected":"")+">Amanda</option><option"+(ev.prof==="Nathalia"?" selected":"")+">Nathalia</option></select></div>"
+    +"<select id='agp'><option"+(ev.prof==="Amanda"?" selected":"")+">Amanda</option><option"+(ev.prof==="Nathalia"?" selected":"")+">Nathalia</option><option"+(ev.prof==="Lilian"?" selected":"")+">Lilian</option></select></div>"
     +"<div class='fi' style='margin-bottom:14px'><label>Observa\u00e7\u00e3o</label><input type='text' id='ago' value='"+(ev.obs||"")+"'></div>"
     +"<div style='display:flex;gap:8px'>"
     +"<button class='btn bp' style='flex:1;justify-content:center' onclick='atualizarEvento("+idx+")'><i class='ti ti-check'></i> Salvar</button>"
@@ -2561,6 +2578,8 @@ function _agruparExpPorAluno(){
       presenca:ultima.presenca||"",
       status:status,
       dataFechamento:sessaoAlvo.dataFechamento||"",
+      motivoNaoFechou:sessaoAlvo.motivoNaoFechou||"",
+      prazo:calcPrazoExp(sessoes[0].data),
       ultimoIdx:D.exp.indexOf(sessaoAlvo)
     };
   });
@@ -2582,21 +2601,24 @@ function alunosExperimentaisHtml(){
   };
   var mesesNomesE=["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
   function mesLabel(m){var p=m.split("-");return mesesNomesE[+p[1]]+"/"+p[0];}
+  var motivoLabels={financeiro:"Financeiro",sem_horarios:"Sem horários",sem_retorno:"Sem retorno",esperava_outra_coisa:"Esperava outra coisa"};
   function linhaAluno(a,mesRef){
     var si=statusInfo[a.status];
     var nomeEsc=String(a.nome).replace(/'/g,"\\'").replace(/"/g,"&quot;");
-    var fechInfo=a.status==="convertido"&&a.dataFechamento?"<div style='font-size:10px;color:var(--gn);margin-top:2px'>Fechou em "+fd(a.dataFechamento)+"</div>":"";
+    var fechInfo=a.status==="convertido"&&a.dataFechamento?"<div style='font-size:10px;color:var(--gn);margin-top:2px'>Fechou em "+fd(a.dataFechamento)+"</div>"
+      :(a.status==="naoConvertido"&&a.motivoNaoFechou?"<div style='font-size:10px;color:var(--rd);margin-top:2px'>Motivo: "+(motivoLabels[a.motivoNaoFechou]||a.motivoNaoFechou)+"</div>":"");
     return "<tr class='exp-row' data-nome='"+String(a.nome).toLowerCase().replace(/'/g,"")+"' data-mes='"+mesRef+"'>"
       +"<td style='font-weight:600'>"+a.nome+"</td>"
       +"<td>"+fd(a.primeiraData)+(a.qtd>1?" &rarr; "+fd(a.ultimaData):"")+"</td>"
       +"<td>"+(a.qtd>1?"<span class='badge bb'><i class='ti ti-repeat'></i> "+a.qtd+"ª aulas</span>":"<span style='color:var(--mt);font-size:11px'>1ª aula</span>")+"</td>"
       +"<td>"+(presInfo[a.presenca]||presInfo[""])+"</td>"
       +"<td><span class='badge "+si.badge+"'><i class='ti "+si.icon+"'></i> "+si.label+"</span>"+fechInfo+"</td>"
+      +"<td style='color:var(--rd);font-weight:700;white-space:nowrap'>"+fd(a.prazo)+"</td>"
       +"<td style='display:flex;gap:4px;flex-wrap:wrap;padding:6px 0'>"
       +(a.presenca!=="presenca"?"<button class='btn bsm' style='background:#2E8FB3;color:#fff;border:none' onclick='marcarPresencaExp("+a.ultimoIdx+",\"presenca\")'><i class='ti ti-check'></i> Presença</button>":"")
       +(a.presenca!=="falta"?"<button class='btn bsm' style='background:#D32F2F;color:#fff;border:none' onclick='marcarPresencaExp("+a.ultimoIdx+",\"falta\")'><i class='ti ti-x'></i> Falta</button>":"")
       +(a.status!=="convertido"?"<button class='btn bs bsm' onclick='converterExpComData("+a.ultimoIdx+")'><i class='ti ti-check'></i> Fechou</button>":"<button class='btn bsm' onclick='converterExpComData("+a.ultimoIdx+")'><i class='ti ti-edit'></i> Alterar data</button>")
-      +(a.status==="pendente"?"<button class='btn bd bsm' onclick='convExp("+a.ultimoIdx+",false)'><i class='ti ti-x'></i> Não vai fechar</button>":"")
+      +(a.status==="pendente"?"<button class='btn bd bsm' onclick='abrirModalNaoFechou("+a.ultimoIdx+")'><i class='ti ti-x'></i> Não vai fechar</button>":"")
       +(a.status==="naoConvertido"?"<button class='btn bsm' onclick='reabrirExp("+a.ultimoIdx+")'><i class='ti ti-arrow-back-up'></i> Reabrir</button>":"")
       +"<button class='btn bsm' onclick='novaAulaExpParaAluno(\""+nomeEsc+"\")'><i class='ti ti-plus'></i> Nova aula</button>"
       +"</td></tr>";
@@ -2616,19 +2638,34 @@ function alunosExperimentaisHtml(){
     +"<div class='fi'><label>Buscar aluno</label><input type='text' id='expBusca' placeholder='Digite o nome...' oninput='filtrarExpTabelas()'></div>"
     +"<div class='fi'><label>Filtrar por mês (última aula / fechamento)</label><select id='expFiltroMes' onchange='filtrarExpTabelas()'><option value=''>Todos os meses</option>"+optsMesFiltro+"</select></div>"
     +"</div></div>";
+  // ===== Card de relatórios PDF: "Não vai fechar" (geral + por mês) =====
+  var naoFecharam=decididos.filter(function(a){return a.status==="naoConvertido";});
+  var mesesNaoFecharam={};
+  naoFecharam.forEach(function(a){var m=(a.ultimaData||"").substring(0,7);if(m)mesesNaoFecharam[m]=true;});
+  var optsMesRelatorio=Object.keys(mesesNaoFecharam).sort().reverse().map(function(m){
+    return "<option value='"+m+"'>"+mesLabel(m)+"</option>";
+  }).join("");
+  var relatorioBar="<div class='card' style='margin-bottom:16px'>"
+    +"<p class='ct'><i class='ti ti-file-text'></i> Relatórios — Não vai fechar</p>"
+    +"<p style='font-size:11px;color:var(--mt);margin:-6px 0 12px'>Gere um PDF com o motivo de cada aluno que não fechou matrícula, agrupado por motivo e com o percentual de cada um.</p>"
+    +"<div class='fr3' style='align-items:flex-end'>"
+    +"<div class='fi'><button class='btn bp' style='width:100%;justify-content:center' onclick='gerarPDFNaoFecharamGeral()'"+(naoFecharam.length===0?" disabled":"")+"><i class='ti ti-file-type-pdf'></i> Relatório geral</button></div>"
+    +"<div class='fi'><label>Mês</label><select id='relExpMes'><option value=''>Selecione...</option>"+optsMesRelatorio+"</select></div>"
+    +"<div class='fi'><button class='btn bs' style='width:100%;justify-content:center' onclick='gerarPDFNaoFecharamMes()'"+(optsMesRelatorio===""?" disabled":"")+"><i class='ti ti-file-type-pdf'></i> Relatório do mês</button></div>"
+    +"</div></div>";
   var htmlPendentes="<div class='card'><p class='ct'><i class='ti ti-users'></i> Controle de alunos — experimental <span style='font-size:11px;font-weight:400;color:var(--mt)'>("+pendentes.length+" em aberto)</span></p>"
     +"<p style='font-size:11px;color:var(--mt);margin:-6px 0 12px'>Alunos ainda sem decisão. Ao marcar \"Fechou\", informe a data real do fechamento: é essa data que os pain\\u00e9is da Catarina e da Secretaria usam para contar o mês. Ao marcar \"Não vai fechar\", o aluno vai para \"Já decidiram\", logo abaixo.</p>"
     +(pendentes.length===0?"<p class='empty' style='padding:10px 0'>Nenhum aluno em aberto no momento.</p>"
-      :"<div class='ox'><table><thead><tr><th>Nome</th><th>Data(s)</th><th>Sess\\u00f5es</th><th>Presença</th><th>Status</th><th>Ações</th></tr></thead><tbody>"
+      :"<div class='ox'><table><thead><tr><th>Nome</th><th>Data(s)</th><th>Sess\u00f5es</th><th>Presença</th><th>Status</th><th>Prazo (60 dias)</th><th>Ações</th></tr></thead><tbody>"
         +pendentes.map(function(a){return linhaAluno(a,(a.ultimaData||"").substring(0,7));}).join("")+"</tbody></table></div>")
     +"</div>";
   var htmlDecididos=decididos.length===0?"":"<details style='margin-top:16px' class='card' id='expDecididosDetails'>"
     +"<summary style='cursor:pointer;list-style:none' class='ct'><i class='ti ti-history'></i> Já decidiram <span style='font-size:11px;font-weight:400;color:var(--mt)'>("+decididos.length+") &mdash; clique para "+"expandir/recolher</span></summary>"
     +"<p style='font-size:11px;color:var(--mt);margin:10px 0 12px'>Alunos que já fecharam ou disseram que não vão fechar. Mudou de ideia? Dá pra converter ou reabrir por aqui a qualquer momento. Use os filtros acima para achar alguém específico.</p>"
-    +"<div class='ox'><table><thead><tr><th>Nome</th><th>Data(s)</th><th>Sess\\u00f5es</th><th>Presença</th><th>Status</th><th>Ações</th></tr></thead><tbody>"
+    +"<div class='ox'><table><thead><tr><th>Nome</th><th>Data(s)</th><th>Sess\u00f5es</th><th>Presença</th><th>Status</th><th>Prazo (60 dias)</th><th>Ações</th></tr></thead><tbody>"
       +decididos.map(function(a){return linhaAluno(a,(a.dataFechamento||a.ultimaData||"").substring(0,7));}).join("")+"</tbody></table></div>"
     +"</details>";
-  return filtroBar+htmlPendentes+htmlDecididos;
+  return filtroBar+relatorioBar+htmlPendentes+htmlDecididos;
 }
 // Filtro por nome/mês nas tabelas de experimentais — pura manipulação de DOM (não recarrega
 // a tela), então o campo de busca não perde o foco enquanto a usuária digita.
@@ -2702,7 +2739,7 @@ function expHtml(){
     +"<div class='fr'><div class='fi'><label>Nome</label><input type='text' id='en'></div>"
     +"<div class='fi'><label>Data</label><input type='date' id='ed'></div></div>"
     +"<div class='fr'><div class='fi'><label>Canal</label><select id='ec'><option>Instagram</option><option>Instagram Luli</option><option>Tráfego Pago</option><option>Indicação</option><option>PAC Clínica 1</option><option>PAC Clínica 2</option><option>Outros</option></select></div>"
-    +"<div class='fi'><label>Professora</label><select id='ep'><option>Amanda</option><option>Nathalia</option></select></div></div>"
+    +"<div class='fi'><label>Professora</label><select id='ep'><option>Amanda</option><option>Nathalia</option><option>Lilian</option></select></div></div>"
     +"<div class='fi' style='margin-bottom:10px'><label>Observações</label><input type='text' id='eo' placeholder='Interesse, plano...'></div>"
     +"<button class='btn bp bf' onclick='saveExp()'><i class='ti ti-check'></i> Registrar</button></div>"
     +"<div class='card c0'><p class='ct'><i class='ti ti-chart-bar'></i> Geral do mês — "+mesAtualExp+"</p>"
@@ -2722,18 +2759,44 @@ async function saveExp(){
   if(!_umaVez("saveExp"))return; // ignora duplo clique
   var nome=document.getElementById("en").value.trim(),data=document.getElementById("ed").value;
   if(!nome||!data){alert2("ea","Preencha nome e data.",false);return;}
-  var obj={nome:nome,data:data,canal:document.getElementById("ec").value,prof:document.getElementById("ep").value,obs:document.getElementById("eo").value,convertido:false,naoConvertido:false,presenca:"",dataFechamento:""};
+  var obj={nome:nome,data:data,canal:document.getElementById("ec").value,prof:document.getElementById("ep").value,obs:document.getElementById("eo").value,convertido:false,naoConvertido:false,presenca:"",dataFechamento:"",motivoNaoFechou:""};
   D.exp.push(obj);
-  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento"];
+  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento","motivoNaoFechou"];
   await push("experimentais",h,h.map(function(k){return String(obj[k]||"");}));
   alert2("ea","Registrado!",true);setTimeout(function(){refreshContent();},800);
 }
+// Motivos disponíveis para "Não vai fechar"
+var MOTIVOS_NAO_FECHOU=[["financeiro","Financeiro"],["sem_horarios","Sem horários"],["sem_retorno","Sem retorno"],["esperava_outra_coisa","Esperava outra coisa"]];
+// Abre modal para selecionar o motivo antes de marcar o aluno como "não vai fechar".
+function abrirModalNaoFechou(i){
+  if(!D.exp[i])return;
+  var nome=D.exp[i].nome||"";
+  var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\"><div class='modal'>"
+    +"<p class='modal-title'><i class='ti ti-x' style='color:var(--rd)'></i> Não vai fechar</p>"
+    +"<p style='font-size:12px;color:var(--mt);margin-bottom:12px'>Qual foi o motivo de <strong>"+nome+"</strong> não fechar matrícula?</p>"
+    +"<div class='fi' style='margin-bottom:14px'><label>Motivo</label><select id='motivoNF'>"
+    +MOTIVOS_NAO_FECHOU.map(function(m){return "<option value='"+m[0]+"'>"+m[1]+"</option>";}).join("")
+    +"</select></div>"
+    +"<div style='display:flex;gap:8px'>"
+    +"<button class='btn bd' style='flex:1;justify-content:center' onclick='confirmarNaoFechou("+i+")'><i class='ti ti-check'></i> Confirmar</button>"
+    +"<button class='btn' onclick='closeModal()'>Cancelar</button>"
+    +"</div></div></div>";
+  document.getElementById("mc").innerHTML=html;
+}
+function confirmarNaoFechou(i){
+  var sel=document.getElementById("motivoNF");
+  var motivo=sel?sel.value:"";
+  closeModal();
+  convExp(i,false,null,motivo);
+}
 // conv=true/false. dataFech: data real do fechamento (opcional — usada quando conv=true).
-async function convExp(i,conv,dataFech){
+// motivo: motivo de não fechar (opcional — usada quando conv=false).
+async function convExp(i,conv,dataFech,motivo){
   if(!D.exp[i])return;
   D.exp[i].convertido=conv;D.exp[i].naoConvertido=!conv;
   D.exp[i].dataFechamento=conv?(dataFech||D.exp[i].dataFechamento||fdISO(new Date())):"";
-  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento"];
+  D.exp[i].motivoNaoFechou=conv?"":(motivo||D.exp[i].motivoNaoFechou||"");
+  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento","motivoNaoFechou"];
   var rows=D.exp.map(function(e){return h.map(function(k){return String(e[k]||"");});});
   dbSave("exp",function(){rewriteAba("experimentais",h,rows);});
   refreshContent();
@@ -2745,7 +2808,8 @@ async function reabrirExp(i){
   D.exp[i].convertido=false;
   D.exp[i].naoConvertido=false;
   D.exp[i].dataFechamento="";
-  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento"];
+  D.exp[i].motivoNaoFechou="";
+  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento","motivoNaoFechou"];
   var rows=D.exp.map(function(e){return h.map(function(k){return String(e[k]||"");});});
   dbSave("exp",function(){rewriteAba("experimentais",h,rows);});
   refreshContent();
@@ -2753,7 +2817,7 @@ async function reabrirExp(i){
 async function marcarPresencaExp(i,val){
   if(!D.exp[i])return;
   D.exp[i].presenca=(D.exp[i].presenca===val)?"":val; // clique de novo no mesmo status desmarca
-  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento"];
+  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento","motivoNaoFechou"];
   var rows=D.exp.map(function(e){return h.map(function(k){return String(e[k]||"");});});
   dbSave("exp",function(){rewriteAba("experimentais",h,rows);});
   refreshContent();
@@ -2761,7 +2825,7 @@ async function marcarPresencaExp(i,val){
 async function delExp(i){
   if(!confirm("Excluir aula experimental de "+D.exp[i].nome+"?"))return;
   D.exp.splice(i,1);
-  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento"];
+  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento","motivoNaoFechou"];
   var rows=D.exp.map(function(e){return h.map(function(k){return String(e[k]||"");});});
   dbSave("exp",function(){rewriteAba("experimentais",h,rows.length?rows:[]);});
   refreshContent();
@@ -3668,7 +3732,7 @@ function agendaHtml(){
   html+="<div class='fi'><label>Reagendamento</label><select id='ag-reagendado' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value='nao'>Não</option><option value='sim'>Sim</option></select></div>";
   html+="</div>";
   html+="<div class='fr3' style='margin-bottom:10px'>";
-  html+="<div class='fi'><label>Professora</label><select id='ag-prof' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value='Amanda'>Amanda</option><option value='Nathalia'>Nathalia</option></select></div>";
+  html+="<div class='fi'><label>Professora</label><select id='ag-prof' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value='Amanda'>Amanda</option><option value='Nathalia'>Nathalia</option><option value='Lilian'>Lilian</option></select></div>";
   html+="<div class='fi'><label>Frequência</label><select id='ag-freq' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value='avulso'>Avulso</option><option value='fixo'>Fixo (semanal até vencimento)</option></select></div>";
   html+="<div class='fi'><label>Duração (min)</label><input type='number' id='ag-duracao' value='60' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'></div>";
   html+="</div>";
@@ -3773,7 +3837,7 @@ async function adicionarAulaAgenda(){
     alertEl.innerHTML="<div class='al2 ali'><i class='ti ti-alert-circle'></i> Preencha nome, data e hora</div>";
     return;
   }
-  var cor=tipo==="experimental"?"#7CB342":(prof==="Amanda"?"#2E8FB3":"#5E35B1");
+  var cor=corProf(prof,tipo);
   var dataFim="";
   if(freq==="fixo"){
     var alunoData=D.mat.find(function(m){return m.nome===nomeOriginal;});
@@ -3931,6 +3995,8 @@ function renderAgendaCalendario(){
   html+="<div style='display:flex;gap:16px;font-size:11px;margin-top:12px;padding:10px;background:var(--b2);border-radius:var(--rs)'>";
   html+="<span style='display:flex;align-items:center;gap:4px'><span style='width:10px;height:10px;background:#2E8FB3;border-radius:2px;display:inline-block'></span>Amanda</span>";
   html+="<span style='display:flex;align-items:center;gap:4px'><span style='width:10px;height:10px;background:#5E35B1;border-radius:2px;display:inline-block'></span>Nathalia</span>";
+  html+="<span style='display:flex;align-items:center;gap:4px'><span style='width:10px;height:10px;background:#9C7FD1;border-radius:2px;display:inline-block'></span>Lilian</span>";
+  html+="<span style='display:flex;align-items:center;gap:4px'><span style='width:10px;height:10px;background:#D4A017;border-radius:2px;display:inline-block'></span>Lilian (experimental)</span>";
   html+="<span style='display:flex;align-items:center;gap:4px'><span style='width:10px;height:10px;background:#7CB342;border-radius:2px;display:inline-block'></span>Experimental</span>";
   html+="<span style='display:flex;align-items:center;gap:4px'><span style='width:10px;height:10px;background:#D32F2F;border-radius:2px;display:inline-block'></span>Falta</span>";
   html+="</div>";
@@ -4086,7 +4152,7 @@ async function marcarPresenca(idx,tipo){
     aula.presenca="presenca";
     var prof=aula.professora;
     var tipoAula=aula.tipo;
-    aula.cor=tipoAula==="experimental"?"#7CB342":(prof==="Amanda"?"#2E8FB3":"#5E35B1");
+    aula.cor=corProf(prof,tipoAula);
     var ok=await saveAgenda();
     if(ok){closeModal();renderAgendaView(agendaView,null);alert("Presença registrada!");}
     else{alert("Erro ao salvar presença.");}
@@ -5552,6 +5618,115 @@ function gerarPDFAvaliacoes(){
   setTimeout(function(){w.print();},1200);
 }
 // ===== FIM MÓDULO PRONTUÁRIO =====
+
+// ===== RELATÓRIOS PDF — AULAS EXPERIMENTAIS: NÃO VAI FECHAR =====
+var MOTIVO_COR={financeiro:"#D32F2F",sem_horarios:"#FFA726",sem_retorno:"#7A8FA3",esperava_outra_coisa:"#5E35B1"};
+var MOTIVO_SEM_COR="#B0BEC5";
+function pdfBadgeCustom(label,cor){return "<span class='pdf-badge' style='background:"+cor+"'>"+label+"</span>";}
+// Monta os segmentos (motivo, quantidade, cor) a partir da lista de alunos.
+function _segmentosMotivo(lista){
+  var total=lista.length;
+  var segs=MOTIVOS_NAO_FECHOU.map(function(m){
+    return {key:m[0],label:m[1],qtd:lista.filter(function(a){return a.motivoNaoFechou===m[0];}).length,cor:MOTIVO_COR[m[0]]||"#8b95a3"};
+  });
+  var semMotivo=lista.filter(function(a){return !a.motivoNaoFechou;}).length;
+  if(semMotivo>0)segs.push({key:"_sem",label:"Não informado",qtd:semMotivo,cor:MOTIVO_SEM_COR});
+  segs.forEach(function(s){s.pct=total>0?Math.round(s.qtd/total*100):0;});
+  return segs;
+}
+// Gráfico de rosca (donut) em SVG puro + legenda, com o total no centro. Estilo dashboard.
+function pdfDashboardMotivos(lista){
+  var total=lista.length;
+  var segs=_segmentosMotivo(lista).filter(function(s){return s.qtd>0;});
+  segs.sort(function(a,b){return b.qtd-a.qtd;});
+  var r=64,cx=90,cy=90,sw=28,circ=2*Math.PI*r,acc=0;
+  var arcs="";
+  if(segs.length===1){
+    arcs+="<circle cx='"+cx+"' cy='"+cy+"' r='"+r+"' fill='none' stroke='"+segs[0].cor+"' stroke-width='"+sw+"'/>";
+  }else{
+    segs.forEach(function(s){
+      var frac=s.qtd/total;
+      var dash=frac*circ;
+      var offset=-acc*circ;
+      arcs+="<circle cx='"+cx+"' cy='"+cy+"' r='"+r+"' fill='none' stroke='"+s.cor+"' stroke-width='"+sw+"' stroke-dasharray='"+dash.toFixed(2)+" "+(circ-dash).toFixed(2)+"' stroke-dashoffset='"+offset.toFixed(2)+"' transform='rotate(-90 "+cx+" "+cy+")'/>";
+      acc+=frac;
+    });
+  }
+  var top=segs[0];
+  var svg="<svg width='180' height='180' viewBox='0 0 180 180'>"+arcs
+    +"<text x='"+cx+"' y='"+(cy-6)+"' text-anchor='middle' font-size='32' font-weight='800' fill='#0b1e35' font-family='Plus Jakarta Sans,sans-serif'>"+total+"</text>"
+    +"<text x='"+cx+"' y='"+(cy+16)+"' text-anchor='middle' font-size='11' fill='#7a8fa3' font-family='Plus Jakarta Sans,sans-serif'>aluno(s)</text>"
+    +"</svg>";
+  var legenda="<div style='flex:1;min-width:220px'>";
+  segs.forEach(function(s){
+    legenda+="<div style='display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eef1f5'>"
+      +"<div style='display:flex;align-items:center;gap:9px'><span style='width:12px;height:12px;border-radius:3px;background:"+s.cor+";display:inline-block;flex-shrink:0'></span>"
+      +"<span style='font-size:12px;font-weight:600;color:#2b2f38'>"+s.label+"</span></div>"
+      +"<div style='text-align:right'><span style='font-size:14px;font-weight:800;color:"+s.cor+"'>"+s.pct+"%</span> <span style='font-size:10px;color:#98a2b0'>("+s.qtd+")</span></div>"
+      +"</div>";
+  });
+  legenda+="</div>";
+  var kpi="<div style='display:flex;gap:12px;margin-bottom:18px'>"
+    +"<div style='flex:1;background:#f7f9fb;border-radius:10px;padding:14px 16px'><div style='font-size:10px;color:#7a8fa3;font-weight:700;text-transform:uppercase;letter-spacing:.5px'>Total analisado</div><div style='font-size:22px;font-weight:800;color:#0b1e35;margin-top:2px'>"+total+" aluno(s)</div></div>"
+    +(top?"<div style='flex:1;background:#f7f9fb;border-radius:10px;padding:14px 16px'><div style='font-size:10px;color:#7a8fa3;font-weight:700;text-transform:uppercase;letter-spacing:.5px'>Motivo mais frequente</div><div style='font-size:16px;font-weight:800;color:"+top.cor+";margin-top:2px'>"+top.label+" — "+top.pct+"%</div></div>":"")
+    +"</div>";
+  var h="<div class='pdf-section-title'>Painel — Motivos de não fechamento</div>";
+  h+=kpi;
+  h+="<div style='display:flex;gap:28px;align-items:center;flex-wrap:wrap;background:#fff;border:1px solid #e7ebf1;border-radius:12px;padding:20px 24px;margin-bottom:6px'>";
+  h+="<div style='flex-shrink:0'>"+svg+"</div>";
+  h+=legenda;
+  h+="</div>";
+  return h;
+}
+// Monta os blocos de alunos agrupados por motivo, em formato de tabela compacta (estilo dashboard).
+function pdfTabelaMotivos(lista){
+  var segs=_segmentosMotivo(lista);
+  var h="";
+  segs.forEach(function(s){
+    var subset=s.key==="_sem"?lista.filter(function(a){return !a.motivoNaoFechou;}):lista.filter(function(a){return a.motivoNaoFechou===s.key;});
+    if(subset.length===0)return;
+    h+="<div class='pdf-section-title'><span style='width:11px;height:11px;border-radius:3px;background:"+s.cor+";display:inline-block'></span>"+s.label+" <span class='pdf-count'>"+subset.length+"</span></div>";
+    h+="<table class='pdf-tbl'><tbody>";
+    h+="<tr style='background:#f7f9fb'><td style='font-weight:800;color:#0b1e35;width:30%'>Aluno</td><td style='font-weight:800;color:#0b1e35;width:26%'>Aula(s) experimental(is)</td><td style='font-weight:800;color:#0b1e35;width:22%'>Canal</td><td style='font-weight:800;color:#0b1e35;width:22%'>Professora</td></tr>";
+    subset.forEach(function(a){
+      h+="<tr><td style='font-weight:600'>"+prEsc(a.nome)+"</td><td>"+fd(a.primeiraData)+(a.qtd>1?" a "+fd(a.ultimaData):"")+" ("+a.qtd+"x)</td><td>"+(a.canal||"—")+"</td><td>"+(a.prof||"—")+"</td></tr>";
+    });
+    h+="</tbody></table>";
+  });
+  return h;
+}
+function _gerarPDFNaoFecharam(lista,titulo,sub){
+  var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap' rel='stylesheet'>"+pdfCssPremium()+"</head><body><div class='sheet'>";
+  h+=pdfHeaderPremium("Aulas Experimentais",titulo,sub,"Total de alunos: "+lista.length);
+  h+="<div class='pdf-body'>";
+  if(lista.length===0){
+    h+="<div class='pdf-empty'>Nenhum aluno não fechou matrícula neste período.</div>";
+  }else{
+    h+=pdfDashboardMotivos(lista);
+    h+=pdfTabelaMotivos(lista);
+  }
+  h+="</div>";
+  h+=pdfFooterPremium();
+  h+="</div></body></html>";
+  var w=window.open("","_blank","width=900,height=700");if(!w){alert("Bloqueador de pop-up ativado.");return;}
+  w.document.write(h);w.document.close();w.focus();
+  setTimeout(function(){w.print();},1200);
+}
+function gerarPDFNaoFecharamGeral(){
+  var lista=_agruparExpPorAluno().filter(function(a){return a.status==="naoConvertido";});
+  _gerarPDFNaoFecharam(lista,"Relatório de Não Fechamento","Relatório geral — todos os períodos");
+}
+function gerarPDFNaoFecharamMes(){
+  var sel=document.getElementById("relExpMes");
+  var mesVal=sel?sel.value:"";
+  if(!mesVal){alert("Selecione um mês.");return;}
+  var lista=_agruparExpPorAluno().filter(function(a){return a.status==="naoConvertido"&&(a.ultimaData||"").substring(0,7)===mesVal;});
+  var mesesNomesRel=["","Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  var mm=mesVal.split("-");
+  var labelMes=mesesNomesRel[+mm[1]]+"/"+mm[0];
+  _gerarPDFNaoFecharam(lista,"Relatório de Não Fechamento","Mês de referência: "+labelMes);
+}
+// ===== FIM RELATÓRIOS PDF — NÃO VAI FECHAR =====
 
 render();
 
