@@ -264,7 +264,7 @@ var AF=[
 {nome:"HENRIQUE NOGUEIRA LIMA",numero:"000036",plano:"Mensal",valor:520,diaVenc:10,diasSem:"Segunda",horario:"",prof:"Amanda",dataMatricula:""}
 ];
 var _afMigrado=false;
-var D={pag:[],mat:[],desp:[],aulas:[],exp:[],caixa:[],canc:[],feedbacks:[],agenda:[],historico:[],perfis:[],leads:[],pront:[]};
+var D={pag:[],mat:[],desp:[],aulas:[],exp:[],caixa:[],canc:[],feedbacks:[],agenda:[],historico:[],perfis:[],leads:[],pront:[],msgdia:[]};
 var syncing=false;
 // ===== PROTEÇÃO DE DADOS (auditoria 15/07) =====
 var STOKEN="GE2-8eb07dfdb4b0b702ff08cd94"; // token validado no Apps Script
@@ -770,7 +770,8 @@ async function syncAll(){
   "historico",
   "perfis",
   "leads",
-  "pront"
+  "pront",
+  "msgdia"
 ];
 
 var abas=[
@@ -786,7 +787,8 @@ var abas=[
   "historico",
   "perfis",
   "leads",
-  "prontuario"
+  "prontuario",
+  "mensagemdia"
 ];
   // ⚡ OTIMIZAÇÃO: Carregar TODAS as abas em paralelo com Promise.all() ao invés de sequencial
   var promises=abas.map(function(aba){return loadAba(aba);});
@@ -1109,6 +1111,61 @@ function resumoProfessoraMesCardHtml(){
     +"<div class='mini-stat' style='text-align:center'><p class='mini-stat-label'>Renovações</p><p class='mini-stat-value' style='font-size:22px;color:var(--pu)'>"+mov.renovadas+"</p></div>"
     +"</div></div>";
 }
+// ===== ANIVERSARIANTES DO DIA (todos os logins) =====
+function aniversariantesHoje(){
+  var hoje=new Date();
+  var diaHoje=hoje.getDate(),mesHoje=hoje.getMonth()+1;
+  return (D.perfis||[]).filter(function(p){
+    if(!p.dataNasc)return false;
+    var partes=String(p.dataNasc).substring(0,10).split("-");
+    if(partes.length<3)return false;
+    return (+partes[2])===diaHoje && (+partes[1])===mesHoje;
+  }).map(function(p){return p.nome;});
+}
+function aniversarioBannerHtml(){
+  var lista=aniversariantesHoje();
+  if(lista.length===0)return "";
+  var nomes=lista.map(function(n){return n.split(" ")[0];}).join(", ");
+  return "<div class='card' style='border-left:4px solid #F9A825;background:linear-gradient(135deg,#FFF8E1 0%,#FFECB3 100%);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:14px'>"
+    +"<div style='font-size:30px;line-height:1'>🎂</div>"
+    +"<div><p style='font-weight:800;color:#8D6E00;margin:0;font-size:14px'>Aniversário hoje!</p>"
+    +"<p style='color:#8D6E00;font-size:13px;margin:3px 0 0'>"+nomes+(lista.length>1?" fazem":" faz")+" aniversário hoje. Que tal dar os parabéns? 🎉</p></div></div>";
+}
+// ===== MENSAGEM MOTIVADORA DO DIA (Gestora escreve, todos os logins veem) =====
+function mensagemDeHoje(){
+  var hoje=fdISO(new Date());
+  var msgs=(D.msgdia||[]).filter(function(m){return m.data===hoje;});
+  return msgs.length?msgs[msgs.length-1]:null;
+}
+function mensagemDoDiaHtml(){
+  var msg=mensagemDeHoje();
+  if(!msg||!msg.texto)return "";
+  return "<div class='card' style='border-left:4px solid var(--brand2);background:var(--bl);padding:14px 18px;margin-bottom:16px'>"
+    +"<p style='font-size:10.5px;color:var(--brand2);font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin:0 0 5px'><i class='ti ti-quote'></i> Mensagem do dia</p>"
+    +"<p style='font-size:14px;color:#0b1e35;font-weight:600;margin:0;font-style:italic'>\u201c"+prEsc(msg.texto)+"\u201d</p></div>";
+}
+function mensagemDoDiaEditorHtml(){
+  var msg=mensagemDeHoje();
+  var atual=msg?msg.texto:"";
+  return "<div class='card' style='margin-bottom:16px'>"
+    +"<p class='ct' style='margin-bottom:2px'><i class='ti ti-quote'></i> Mensagem motivadora do dia</p>"
+    +"<p style='font-size:11px;color:var(--mt);margin:0 0 10px'>Aparece pra Secretaria e pra Professora Amanda hoje.</p>"
+    +"<textarea id='msgDiaInput' rows='2' placeholder='Escreva uma mensagem pro time...' style='font-size:13px;padding:10px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx);resize:vertical'>"+prEsc(atual)+"</textarea>"
+    +"<button class='btn bp' style='margin-top:10px' onclick='salvarMensagemDia()'><i class='ti ti-check'></i> Salvar mensagem</button>"
+    +"</div>";
+}
+async function salvarMensagemDia(){
+  var el=document.getElementById("msgDiaInput");
+  var txt=el?el.value.trim():"";
+  if(!txt){alert("Escreva uma mensagem antes de salvar.");return;}
+  var hoje=fdISO(new Date());
+  D.msgdia=(D.msgdia||[]).filter(function(m){return m.data!==hoje;});
+  D.msgdia.push({data:hoje,texto:txt,autor:(user&&user.name)||"Catarina"});
+  var h=["data","texto","autor"];
+  var rows=D.msgdia.map(function(m){return h.map(function(k){return String(m[k]||"");});});
+  dbSave("msgdia",function(){rewriteAba("mensagemdia",h,rows);});
+  refreshContent();
+}
 function painelHtml(){
   var pfx=mesAtualPfx();
   var pagMes=D.pag.filter(function(p){return p.data&&p.data.startsWith(pfx);});
@@ -1273,6 +1330,7 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
     // e o alerta de uso de imagem numa coluna lateral compacta.
     var profNomeAmanda=(user.name||"").replace("Professora ","").trim()||"Amanda";
     return heroSimplesHtml
+      +aniversarioBannerHtml()+mensagemDoDiaHtml()
       +"<div class='painel-2col'>"
       +"<div>"+agendaHojeCardHtml(profNomeAmanda)+feedbacksDoMesCardHtml()+"</div>"
       +"<div>"+resumoProfessoraMesCardHtml()+semAutorizacaoImagemCardHtml()+"</div>"
@@ -1284,6 +1342,7 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
     // agenda (com filtro de dia) numa coluna lateral compacta — agenda é somente leitura,
     // sem nenhuma ação disponível.
     return heroSimplesHtml
+      +aniversarioBannerHtml()+mensagemDoDiaHtml()
       +"<div class='painel-2col'>"
       +"<div>"+feedbacksDoMesCardHtml()+alertaHtml+resumoMensalHtml+"</div>"
       +"<div>"+semAutorizacaoImagemCardHtml()+experimentaisMesCardHtml()+"<div style='margin-top:16px'></div>"+agendaHojeCardHtml(null)+"</div>"
@@ -1341,6 +1400,7 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
 
   var colEsquerda=feedbacksDoMesCardHtml()+alertaHtml+htmlGrafico+resumoMensalHtmlGestora;
   return heroHtml
+    +aniversarioBannerHtml()+mensagemDoDiaEditorHtml()
     +"<div class='painel-2col'>"
     +"<div>"+colEsquerda+"</div>"
     +proximos15HtmlPro
