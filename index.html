@@ -264,7 +264,7 @@ var AF=[
 {nome:"HENRIQUE NOGUEIRA LIMA",numero:"000036",plano:"Mensal",valor:520,diaVenc:10,diasSem:"Segunda",horario:"",prof:"Amanda",dataMatricula:""}
 ];
 var _afMigrado=false;
-var D={pag:[],mat:[],desp:[],aulas:[],exp:[],caixa:[],canc:[],feedbacks:[],agenda:[],historico:[],perfis:[],leads:[],pront:[],msgdia:[]};
+var D={pag:[],mat:[],desp:[],aulas:[],exp:[],caixa:[],canc:[],feedbacks:[],agenda:[],historico:[],perfis:[],leads:[],pront:[],msgdia:[],precos:[]};
 var syncing=false;
 // ===== PROTEÇÃO DE DADOS (auditoria 15/07) =====
 var STOKEN="GE2-8eb07dfdb4b0b702ff08cd94"; // token validado no Apps Script
@@ -771,7 +771,8 @@ async function syncAll(){
   "perfis",
   "leads",
   "pront",
-  "msgdia"
+  "msgdia",
+  "precos"
 ];
 
 var abas=[
@@ -788,7 +789,8 @@ var abas=[
   "perfis",
   "leads",
   "prontuario",
-  "mensagemdia"
+  "mensagemdia",
+  "tabelaprecos"
 ];
   // ⚡ OTIMIZAÇÃO: Carregar TODAS as abas em paralelo com Promise.all() ao invés de sequencial
   var promises=abas.map(function(aba){return loadAba(aba);});
@@ -927,7 +929,8 @@ var NAV=[
   {id:"contratos",icon:"ti-file-certificate",label:"Contratos"},
   {id:"agenda",icon:"ti-calendar-event",label:"Agenda"},
   {id:"despesas",icon:"ti-receipt",label:"Despesas"},
-  {id:"presenca",icon:"ti-check",label:"Presença"}
+  {id:"presenca",icon:"ti-check",label:"Presença"},
+  {id:"precos",icon:"ti-tag",label:"Tabela de Preços"}
 ];
 function appHtml(){
   var isCat=user.role==="Gestora";
@@ -963,6 +966,11 @@ navAll.push({id:"relatorio",icon:"ti-file-export",label:"Relatório"});
     +"<button class='blo' onclick='logout()'><i class='ti ti-logout'></i></button>"
     +"</div></div></div>"
     +"<div class='main'><div class='topbar'><div><p class='tbt'>"+cur+"</p><p class='tbs'>Academia &middot; "+MES+"</p></div>"
+    +(isCat?"<div style='position:relative;flex:1;max-width:320px;margin:0 12px'>"
+      +"<i class='ti ti-search' style='position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--mt)'></i>"
+      +"<input type='text' id='busca-rapida-input' placeholder='Buscar aluno (prontuário)...' oninput='filtrarBuscaRapida(this.value)' onfocus='filtrarBuscaRapida(this.value)' style='width:100%;font-size:12px;padding:8px 10px 8px 30px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'>"
+      +"<div id='busca-rapida-resultados' style='display:none;position:absolute;top:38px;left:0;right:0;background:#fff;border:1px solid var(--br);border-radius:8px;box-shadow:0 6px 16px rgba(0,0,0,0.14);max-height:280px;overflow-y:auto;z-index:60'></div>"
+      +"</div>":"")
     +"<div style='display:flex;align-items:center;gap:10px'>"
     +(user.role==="Gestora"?"<button class='btn bsm' title='Baixar backup (JSON)' onclick='baixarBackup()'><i class='ti ti-download'></i></button>"
     +"<button class='btn bsm' title='Restaurar backup local' onclick='restaurarBackupLocal()'><i class='ti ti-history'></i></button>":"")
@@ -979,6 +987,7 @@ function tabHtml(){
   if(tab==="alunos")return alunosHtml();
   if(tab==="caixa")return caixaHtml();
   if(tab==="pagamentos")return pagHtml();
+  if(tab==="precos")return precosHtml();
   if(tab==="matriculas")return matHtml();
   if(tab==="experimentais")return expHtml();
   if(tab==="feedbacks")return feedbacksTabHtml();
@@ -1631,7 +1640,13 @@ function pagHtml(){
   }).join("");
   var totMes=pag_mes.reduce(function(a,p){return{b:a.b+(+p.bruto||0),l:a.l+(+p.liquido||0)};},{b:0,l:0});
   var dupInfo=_contarDuplicatasPag();
-  return (dupInfo.total>0?"<div class='card' style='background:#FEF9E7;border:1px solid #F1C40F'><p style='font-size:12px;font-weight:600;color:#7D6608'><i class='ti ti-alert-triangle'></i> Encontrei "+dupInfo.total+" pagamento(s) duplicado(s) (mesmo aluno, data, valor e forma). <a onclick='limparDuplicatasPag()' style='text-decoration:underline;cursor:pointer;color:#7D6608'>Revisar e remover</a></p></div>":"")
+  return "<div class='card' style='margin-bottom:16px'><p class='ct'><i class='ti ti-search'></i> Consultar pagamentos de um aluno</p>"
+    +"<div style='position:relative'>"
+    +"<i class='ti ti-search' style='position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--mt)'></i>"
+    +"<input type='text' id='busca-pag-input' placeholder='Digite o nome do aluno...' oninput='filtrarBuscaPagamento(this.value)' onfocus='filtrarBuscaPagamento(this.value)' style='width:100%;font-size:13px;padding:9px 10px 9px 32px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'>"
+    +"<div id='busca-pag-resultados' style='display:none;position:absolute;top:42px;left:0;right:0;background:#fff;border:1px solid var(--br);border-radius:8px;box-shadow:0 6px 16px rgba(0,0,0,0.14);max-height:280px;overflow-y:auto;z-index:60'></div>"
+    +"</div></div>"
+    +(dupInfo.total>0?"<div class='card' style='background:#FEF9E7;border:1px solid #F1C40F'><p style='font-size:12px;font-weight:600;color:#7D6608'><i class='ti ti-alert-triangle'></i> Encontrei "+dupInfo.total+" pagamento(s) duplicado(s) (mesmo aluno, data, valor e forma). <a onclick='limparDuplicatasPag()' style='text-decoration:underline;cursor:pointer;color:#7D6608'>Revisar e remover</a></p></div>":"")
     +"<div class='card'><p class='ct'><i class='ti ti-plus'></i> Registrar pagamento</p>"
     +"<div id='pa'></div>"
     +"<div class='fr'><div class='fi'><label>Aluno</label><div style='display:flex;gap:8px'><select id='pal' onchange='prefillAluno()' style='flex:1'>"+opts+"</select><input type='text' id='pal_outro' placeholder='Nome da criança' style='flex:1;display:none;padding:8px 10px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'></div></div>"
@@ -1654,6 +1669,91 @@ function pagHtml(){
     +"<tbody>"+rows+"</tbody></table></div></div>";
   }catch(e){console.error("pagHtml:",e);return "<div class='card'><p class='empty'>Erro: "+e.message+"</p></div>";}
 }
+
+// ===== TABELA DE PREÇOS (Mensalidades) — Catarina e Secretária =====
+var PRECOS_FREQS=[
+  {key:"1x",label:"1X POR SEMANA"},
+  {key:"2x",label:"2X POR SEMANA"},
+  {key:"3x",label:"3X POR SEMANA"},
+  {key:"4x",label:"4X POR SEMANA"},
+  {key:"5x",label:"5X POR SEMANA"}
+];
+var PRECOS_PLANOS=[
+  {key:"mensal",label:"Mensal"},
+  {key:"trimestral",label:"Trimestral"},
+  {key:"semestral",label:"Semestral"},
+  {key:"anual",label:"Anual"}
+];
+var PRECOS_HEADERS=(function(){
+  var h=[];
+  PRECOS_FREQS.forEach(function(f){
+    PRECOS_PLANOS.forEach(function(p){
+      h.push(f.key+"_"+p.key+"_original");
+      h.push(f.key+"_"+p.key+"_promo");
+    });
+  });
+  return h;
+})();
+async function _savePrecosNow(){
+  var obj={};
+  PRECOS_HEADERS.forEach(function(k){
+    var el=document.getElementById("pc_"+k);
+    obj[k]=el?el.value.replace(",",".").trim():"";
+  });
+  D.precos=[obj];
+  var rows=[PRECOS_HEADERS.map(function(k){return obj[k]||"";})];
+  var ok=await rewriteAba("tabelaprecos",PRECOS_HEADERS,rows);
+  return ok;
+}
+async function salvarPrecos(){
+  var ok=await _savePrecosNow();
+  var msg=document.getElementById("precos-msg");
+  if(msg)msg.innerHTML=ok
+    ?"<div class='al2 als'><i class='ti ti-check'></i> Tabela de preços salva!</div>"
+    :"<div class='al2 ali' style='background:#FADBD8;color:#C0392B'><i class='ti ti-alert-triangle'></i> Erro ao salvar. Verifique se a aba \"tabelaprecos\" existe na planilha.</div>";
+  if(ok)setTimeout(function(){if(msg)msg.innerHTML="";},2500);
+}
+function _precoVal(k){
+  var d=(D.precos&&D.precos[0])?D.precos[0]:{};
+  return d[k]||"";
+}
+function precosColunaHtml(sufixo,corAccent){
+  var h="";
+  PRECOS_FREQS.forEach(function(f){
+    h+="<div style='margin-bottom:14px'>";
+    h+="<p style='font-size:12px;font-weight:800;color:"+corAccent+";text-transform:uppercase;letter-spacing:.04em;margin:0 0 8px;padding-bottom:6px;border-bottom:2px solid "+corAccent+"33'>"+f.label+"</p>";
+    h+="<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px'>";
+    PRECOS_PLANOS.forEach(function(p){
+      var key=f.key+"_"+p.key+"_"+sufixo;
+      h+="<div class='fi'><label style='font-size:11px'>"+p.label+"</label>"
+        +"<div style='position:relative'><span style='position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--mt)'>R$</span>"
+        +"<input type='text' inputmode='decimal' id='pc_"+key+"' value='"+_precoVal(key)+"' placeholder='0,00' style='width:100%;font-size:13px;padding:8px 8px 8px 30px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'></div>"
+        +"</div>";
+    });
+    h+="</div></div>";
+  });
+  return h;
+}
+function precosHtml(){
+  if(!D.precos)D.precos=[];
+  var html="<div class='content'><div class='ct'><i class='ti ti-tag'></i> Tabela de Preços — Mensalidades</div>";
+  html+="<p style='font-size:12px;color:var(--mt);margin:-8px 0 16px'>Cadastre aqui os valores de tabela (original) e os valores promocionais praticados atualmente. Esses valores são apenas de referência/consulta — não alteram automaticamente contratos já firmados.</p>";
+  html+="<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-bottom:16px'>";
+  html+="<div class='card'>";
+  html+="<p class='ct' style='display:flex;align-items:center;gap:8px'><i class='ti ti-file-invoice' style='color:#5E35B1'></i> Aula Individual — Valor Original</p>";
+  html+=precosColunaHtml("original","#5E35B1");
+  html+="</div>";
+  html+="<div class='card'>";
+  html+="<p class='ct' style='display:flex;align-items:center;gap:8px'><i class='ti ti-discount-2' style='color:#2E8FB3'></i> Aula Individual — Valor Promocional Atual</p>";
+  html+=precosColunaHtml("promo","#2E8FB3");
+  html+="</div>";
+  html+="</div>";
+  html+="<button class='btn bp bf' onclick='salvarPrecos()'><i class='ti ti-check'></i> Salvar tabela de preços</button>";
+  html+="<div id='precos-msg' style='margin-top:10px'></div>";
+  html+="</div>";
+  return html;
+}
+
 function editarPagamento(idx){
   var p=D.pag[idx];if(!p)return;
   var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\">"
@@ -3804,6 +3904,7 @@ function agendaHtml(){
   html+="<div style='display:flex;gap:4px;margin-bottom:16px'>";
   html+="<button class='tab active' id='tab-mes' onclick='mudarViewAgenda(\"mes\",this)'>Mês</button>";
   html+="<button class='tab' id='tab-semana' onclick='mudarViewAgenda(\"semana\",this)'>Semana</button>";
+  html+="<button class='tab' id='tab-semana-horario' onclick='mudarViewAgenda(\"semana-horario\",this)'>Horário</button>";
   html+="<button class='tab' id='tab-dia' onclick='mudarViewAgenda(\"dia\",this)'>Dia</button>";
   html+="<button class='tab' id='tab-lista' onclick='mudarViewAgenda(\"lista\",this)'>Lista</button>";
   html+="</div>";
@@ -4019,6 +4120,7 @@ function renderAgendaView(tipo,_){
   if(!container)return;
   if(tipo==="mes"||tipo==="calendario"){container.innerHTML=renderAgendaCalendario();}
   else if(tipo==="semana"){container.innerHTML=renderAgendaSemana();}
+  else if(tipo==="semana-horario"){container.innerHTML=renderAgendaSemanaHorario();}
   else if(tipo==="dia"){container.innerHTML=renderAgendaDia();}
   else{container.innerHTML=renderAgendaLista();}
 }
@@ -4046,7 +4148,8 @@ function renderAgendaCalendario(){
     html+="<p style='font-weight:"+(isHoje?"700":"600")+";font-size:12px;margin:0 0 3px;color:"+(isHoje?"var(--brand)":"var(--tx)")+"'>"+dia+"</p>";
     aulas.slice(0,3).forEach(function(a){
       var corReal=a.presenca==="falta"?"#D32F2F":(a.presenca==="reagendado"?"#9E9E9E":a.cor);
-      html+="<div style='background:"+corReal+";color:#fff;padding:2px 3px;border-radius:2px;font-size:9px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"+a.hora+" "+a.aluno+"</div>";
+      var temReag=(a.presenca==="reagendado"||parseReagendamentoNotas(a.notas))?" <i class='ti ti-refresh' style='font-size:8px'></i>":"";
+      html+="<div style='background:"+corReal+";color:#fff;padding:2px 3px;border-radius:2px;font-size:9px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"+a.hora+" "+a.aluno+temReag+"</div>";
     });
     if(aulas.length>3){html+="<div style='font-size:9px;color:var(--mt)'>+"+( aulas.length-3)+"</div>";}
     if(temAlerta){html+="<div style='background:#FFA726;color:#fff;padding:1px 3px;border-radius:2px;font-size:9px;white-space:nowrap;overflow:hidden'>📌 Vencimento</div>";}
@@ -4072,6 +4175,153 @@ function mudarMesAgenda(delta){
 }
 
 // === VISTA SEMANA ===
+// ===== VISUALIZAÇÃO HORÁRIO DA AGENDA (08:00-17:30, a cada 30 min) =====
+var horariosFechados={}; // {data_prof: Set de horas} ex: {"2026-07-22_Amanda": Set(["08:00", "14:00"])}
+function getKeyHorarioFechado(data,prof){return data+"_"+prof;}
+function toggleHorarioFechado(data,prof,hora){
+  var key=getKeyHorarioFechado(data,prof);
+  if(!horariosFechados[key])horariosFechados[key]=new Set();
+  if(horariosFechados[key].has(hora))horariosFechados[key].delete(hora);
+  else horariosFechados[key].add(hora);
+  localStorage.setItem("horariosFechados",JSON.stringify(Object.keys(horariosFechados).map(function(k){return {k:k,v:Array.from(horariosFechados[k]||[])};})));
+}
+function carregarHorariosFechados(){
+  try{
+    var dados=JSON.parse(localStorage.getItem("horariosFechados")||"[]");
+    dados.forEach(function(d){horariosFechados[d.k]=new Set(d.v);});
+  }catch(e){}
+}
+carregarHorariosFechados();
+
+var offsetSemanaHorario=0;
+var CORES_PROF={"Amanda":"#2E8FB3","Nathalia":"#5E35B1","Lilian":"#9C7FD1"};
+
+function _buildAgendaHorarioHtml(){
+  var hoje=new Date();hoje.setDate(hoje.getDate()+offsetSemanaHorario);
+  var dow=hoje.getDay();
+  var seg=new Date(hoje);seg.setDate(hoje.getDate()-dow);
+  var hojeReal=fdISO(new Date());
+  var horas=[];for(var h=8;h<18;h++){horas.push(String(h).padStart(2,"0")+":00");horas.push(String(h).padStart(2,"0")+":30");}horas.pop();horas.push("17:30");
+  var diasSem=["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
+  var diasSemAbv=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+
+  var html="<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:14px'>";
+  html+="<button class='btn bsm' onclick='mudarSemanaAgendaHorario(-7)' style='border-radius:8px'><i class='ti ti-chevron-left'></i></button>";
+  html+="<div style='text-align:center'>";
+  html+="<strong style='font-size:14px;color:var(--tx)'>"+seg.toLocaleDateString("pt-BR",{day:"2-digit",month:"short"})+" — "+new Date(seg.getTime()+6*86400000).toLocaleDateString("pt-BR",{day:"2-digit",month:"short",year:"numeric"})+"</strong>";
+  if(offsetSemanaHorario!==0){html+="<br><span onclick='offsetSemanaHorario=0;mudarSemanaAgendaHorario(0)' style='font-size:10px;color:var(--brand2);cursor:pointer;text-decoration:underline'>voltar para hoje</span>";}
+  html+="</div>";
+  html+="<button class='btn bsm' onclick='mudarSemanaAgendaHorario(7)' style='border-radius:8px'><i class='ti ti-chevron-right'></i></button></div>";
+
+  html+="<div style='overflow-x:auto;margin-bottom:10px;border-radius:10px;border:1px solid var(--br);background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.06)'>";
+  html+="<table style='border-collapse:separate;border-spacing:0;width:100%;font-size:11px'>";
+
+  // Cabeçalho
+  html+="<thead><tr>";
+  html+="<th style='padding:10px 4px;text-align:center;font-weight:700;width:52px;position:sticky;left:0;top:0;z-index:3;background:linear-gradient(180deg,var(--brand2),var(--brand));color:#fff;font-size:10px;border-top-left-radius:10px'>Hora</th>";
+  for(var d=0;d<7;d++){
+    var dia=new Date(seg);dia.setDate(seg.getDate()+d);
+    var ds=fdISO(dia);
+    var isHoje=(ds===hojeReal);
+    var lastCol=(d===6);
+    html+="<th style='padding:10px 4px;text-align:center;font-weight:700;min-width:92px;background:"+(isHoje?"linear-gradient(180deg,#FFA726,#FB8C00)":"linear-gradient(180deg,var(--brand2),var(--brand))")+";color:#fff;border-left:1px solid rgba(255,255,255,0.15);font-size:10.5px"+(lastCol?";border-top-right-radius:10px":"")+"'>"+diasSemAbv[d]+"<br><span style='font-size:13px;font-weight:800'>"+dia.getDate()+"</span>"+(isHoje?"<div style='font-size:8px;font-weight:700;letter-spacing:.5px;margin-top:1px'>HOJE</div>":"")+"</th>";
+  }
+  html+="</tr></thead>";
+  html+="<tbody>";
+
+  horas.forEach(function(hora,hIdx){
+    var isHoraCheia=hora.endsWith(":00");
+    var rowBg=isHoraCheia?"#fbfcfe":"#fff";
+    html+="<tr style='height:34px'>";
+    html+="<td style='padding:2px 4px;text-align:center;background:"+(isHoraCheia?"var(--b3)":"var(--b2)")+";border-right:2px solid var(--br);border-bottom:1px solid #eef1f5;font-weight:"+(isHoraCheia?"800":"500")+";position:sticky;left:0;z-index:1;color:"+(isHoraCheia?"var(--tx)":"var(--mt)")+";font-size:"+(isHoraCheia?"10.5px":"9.5px")+"'>"+hora+"</td>";
+    for(var d=0;d<7;d++){
+      var dia=new Date(seg);dia.setDate(seg.getDate()+d);
+      var ds=fdISO(dia);
+      var isHojeCol=(ds===hojeReal);
+      var aulasHora=(D.agenda||[]).filter(function(a){return a.data===ds&&a.hora===hora&&a.tipo!=="alerta_contrato"&&a.status!=="cancelado";});
+      var key=getKeyHorarioFechado(ds,(aulasHora.length?aulasHora[0].professora:"Amanda"));
+      var isFechado=aulasHora.length===0&&horariosFechados[key]&&horariosFechados[key].has(hora);
+      var bg=aulasHora.length?"#fff":(isFechado?"repeating-linear-gradient(135deg,#f3f4f6,#f3f4f6 5px,#e9ebee 5px,#e9ebee 10px)":(isHojeCol?"#fff9ef":rowBg));
+      html+="<td style='padding:1px;border-left:1px solid #eef1f5;border-bottom:1px solid #eef1f5;background:"+bg+";vertical-align:top;position:relative;cursor:"+(aulasHora.length?"default":"pointer")+";transition:background .15s' onmouseover=\"if(!"+aulasHora.length+")this.style.background='#eef6f9'\" onmouseout=\"if(!"+aulasHora.length+")this.style.background='"+(isFechado?"#e9ebee":(isHojeCol?"#fff9ef":rowBg))+"'\" onclick=\"if(!"+aulasHora.length+")toggleHorarioFechadoUI('"+ds+"',"+d+",'"+hora+"')\" title=\""+(aulasHora.length?"":(isFechado?"Clique para reabrir este horário":"Clique para fechar este horário"))+"\">";
+      if(aulasHora.length){
+        aulasHora.forEach(function(a){
+          var agendaIdx=(D.agenda||[]).indexOf(a);
+          var corReal=a.presenca==="falta"?"#D32F2F":(a.presenca==="reagendado"?"#9E9E9E":a.cor);
+          var presIcon=a.presenca==="presenca"?"<i class='ti ti-circle-check' style='font-size:9px'></i>":a.presenca==="falta"?"<i class='ti ti-circle-x' style='font-size:9px'></i>":a.presenca==="reagendado"?"<i class='ti ti-refresh' style='font-size:9px'></i>":"";
+          var temReag=parseReagendamentoNotas(a.notas)?" <i class='ti ti-history' style='font-size:8px;opacity:.85'></i>":"";
+          html+="<div style='margin:1.5px;padding:3px 4px;border-radius:4px;background:"+corReal+";color:#fff;font-size:9px;line-height:1.25;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,0.15);display:flex;align-items:center;justify-content:space-between;gap:2px' onclick='event.stopPropagation();abrirAulaHorario("+agendaIdx+")'>";
+          html+="<span style='overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700'>"+a.aluno.split(" ")[0]+"</span>";
+          html+="<span style='flex-shrink:0'>"+presIcon+temReag+"</span>";
+          html+="</div>";
+        });
+      }else if(isFechado){
+        html+="<div style='text-align:center;color:#9aa4b0;font-weight:700;font-size:12px;line-height:32px'><i class='ti ti-lock' style='font-size:11px'></i></div>";
+      }
+      html+="</td>";
+    }
+    html+="</tr>";
+  });
+
+  html+="</tbody></table></div>";
+
+  // Legenda profissional
+  html+="<div style='display:flex;flex-wrap:wrap;gap:12px;font-size:10.5px;padding:10px 12px;background:var(--b2);border-radius:8px;align-items:center'>";
+  Object.keys(CORES_PROF).forEach(function(prof){
+    html+="<span style='display:flex;align-items:center;gap:5px'><span style='width:10px;height:10px;background:"+CORES_PROF[prof]+";border-radius:3px;display:inline-block'></span>"+prof+"</span>";
+  });
+  html+="<span style='display:flex;align-items:center;gap:5px'><span style='width:10px;height:10px;background:#D32F2F;border-radius:3px;display:inline-block'></span>Falta</span>";
+  html+="<span style='display:flex;align-items:center;gap:5px'><span style='width:10px;height:10px;background:#9E9E9E;border-radius:3px;display:inline-block'></span>Reagendada</span>";
+  html+="<span style='display:flex;align-items:center;gap:5px'><span style='width:10px;height:10px;background:repeating-linear-gradient(135deg,#f3f4f6,#f3f4f6 3px,#dfe2e6 3px,#dfe2e6 6px);border-radius:3px;display:inline-block;border:1px solid #ccc'></span>Fechado</span>";
+  html+="<span style='margin-left:auto;color:var(--mt);font-size:10px'><i class='ti ti-info-circle'></i> Clique no aluno p/ presença • clique no vazio p/ fechar/abrir</span>";
+  html+="</div>";
+  return html;
+}
+
+function renderAgendaSemanaHorario(){
+  return _buildAgendaHorarioHtml();
+}
+
+function mudarSemanaAgendaHorario(dias){
+  offsetSemanaHorario+=dias;
+  var container=document.getElementById("ag-view");
+  if(!container)return;
+  container.innerHTML=_buildAgendaHorarioHtml();
+}
+
+function toggleHorarioFechadoUI(data,dayIndex,hora){
+  var seg=new Date(new Date());seg.setDate(new Date().getDate()-new Date().getDay()+offsetSemanaHorario);
+  var dia=new Date(seg);dia.setDate(seg.getDate()+dayIndex);
+  var dsCorreto=fdISO(dia);
+  var profSel="Amanda";
+  toggleHorarioFechado(dsCorreto,profSel,hora);
+  mudarSemanaAgendaHorario(0);
+}
+
+function abrirAulaHorario(agendaIdx){
+  var a=D.agenda[agendaIdx];
+  if(!a)return;
+  var corReal=a.presenca==="falta"?"#D32F2F":(a.presenca==="reagendado"?"#9E9E9E":a.cor);
+  var presLabel=a.presenca==="presenca"?"✓ Presença":a.presenca==="falta"?"✗ Falta":a.presenca==="reagendado"?"↻ Reagendada":"";
+  var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\">";
+  html+="<div class='modal' onclick='event.stopPropagation()'>";
+  html+="<p class='ct'><i class='ti ti-clock' style='color:"+corReal+"'></i> "+a.aluno+"</p>";
+  html+="<div style='background:var(--b2);border-radius:6px;padding:10px;margin-bottom:12px;border-left:3px solid "+corReal+"'>";
+  html+="<p style='font-size:11px;margin:0 0 4px'><strong>"+a.data.split("-").reverse().join("/")+" às "+a.hora+"</strong></p>";
+  html+="<p style='font-size:10px;color:var(--mt);margin:0'>"+a.duracao+"min • "+a.professora+"</p>";
+  if(presLabel){html+="<p style='font-size:10px;font-weight:700;color:"+corReal+";margin:4px 0 0'>"+presLabel+"</p>";}
+  html+=reagendamentoLabelHtml(a);
+  html+="</div>";
+  if(user.role!=="Professora"){
+    html+="<div style='display:flex;gap:6px;margin-bottom:12px'>";
+    html+="<button class='btn bsm' style='flex:1;background:#2E8FB3;color:#fff;border:none' onclick='marcarPresenca("+agendaIdx+",\"presenca\");closeModal();renderAgendaView(agendaView,null);'><i class='ti ti-circle-check'></i> Presença</button>";
+    html+="<button class='btn bsm' style='flex:1;background:#D32F2F;color:#fff;border:none' onclick='marcarPresenca("+agendaIdx+",\"falta\");closeModal();renderAgendaView(agendaView,null);'><i class='ti ti-circle-x'></i> Falta</button>";
+    html+="</div>";
+  }
+  html+="<button class='btn bd bsm' style='width:100%;justify-content:center' onclick='closeModal()'><i class='ti ti-x'></i> Fechar</button>";
+  html+="</div></div>";
+  document.getElementById("mc").innerHTML=html;
+}
+
 function renderAgendaSemana(){
   var hoje=new Date();
   var dow=hoje.getDay();
@@ -4091,7 +4341,7 @@ function renderAgendaSemana(){
     html+="<p style='font-weight:600;font-size:11px;margin:0 0 6px;color:"+(isHoje?"var(--brand)":"var(--mt)")+"'>"+diasSem[d]+" "+dia.getDate()+"</p>";
     aulas.sort(function(a,b){return a.hora.localeCompare(b.hora);}).forEach(function(a){
       var corReal=a.presenca==="falta"?"#D32F2F":(a.presenca==="reagendado"?"#9E9E9E":a.cor);
-      html+="<div style='background:"+corReal+";color:#fff;padding:3px 4px;border-radius:3px;font-size:9px;margin-bottom:2px;cursor:pointer;line-height:1.3' onclick='abrirDiaAgenda(\""+ds+"\")'><strong>"+a.hora+"</strong><br>"+a.aluno+"</div>";
+      html+="<div style='background:"+corReal+";color:#fff;padding:3px 4px;border-radius:3px;font-size:9px;margin-bottom:2px;cursor:pointer;line-height:1.3' onclick='abrirDiaAgenda(\""+ds+"\")'><strong>"+a.hora+"</strong>"+(a.presenca==="reagendado"||parseReagendamentoNotas(a.notas)?" <i class=\'ti ti-refresh\' style=\'font-size:9px\'></i>":"")+"<br>"+a.aluno+"</div>";
     });
     html+="</div>";
   }
@@ -4123,7 +4373,7 @@ function mudarSemanaAgenda(dias){
     html+="<p style='font-weight:600;font-size:11px;margin:0 0 6px;color:"+(isHoje?"var(--brand)":"var(--mt)")+"'>"+diasSem[d]+" "+dia.getDate()+"</p>";
     aulas.sort(function(a,b){return a.hora.localeCompare(b.hora);}).forEach(function(a){
       var corReal=a.presenca==="falta"?"#D32F2F":(a.presenca==="reagendado"?"#9E9E9E":a.cor);
-      html+="<div style='background:"+corReal+";color:#fff;padding:3px 4px;border-radius:3px;font-size:9px;margin-bottom:2px;cursor:pointer;line-height:1.3' onclick='abrirDiaAgenda(\""+ds+"\")'><strong>"+a.hora+"</strong><br>"+a.aluno+"</div>";
+      html+="<div style='background:"+corReal+";color:#fff;padding:3px 4px;border-radius:3px;font-size:9px;margin-bottom:2px;cursor:pointer;line-height:1.3' onclick='abrirDiaAgenda(\""+ds+"\")'><strong>"+a.hora+"</strong>"+(a.presenca==="reagendado"||parseReagendamentoNotas(a.notas)?" <i class=\'ti ti-refresh\' style=\'font-size:9px\'></i>":"")+"<br>"+a.aluno+"</div>";
     });
     html+="</div>";
   }
@@ -4152,6 +4402,7 @@ function renderAgendaDia(){
       html+="<div><p style='font-weight:600;font-size:14px;margin:0 0 3px'>"+a.aluno+"</p>";
       html+="<p style='font-size:12px;color:var(--mt);margin:0'>"+a.hora+" • "+a.duracao+" min • "+a.professora+"</p>";
       if(presLabel){html+="<p style='font-size:11px;font-weight:600;margin:4px 0 0;color:"+(a.presenca==="falta"?"#D32F2F":a.presenca==="reagendado"?"#9E9E9E":"#2E8FB3")+"'>"+presLabel+"</p>";}
+      html+=reagendamentoLabelHtml(a);
       html+="</div>";
       html+="<div style='display:flex;flex-direction:column;gap:4px'>";
       if(user.role!=="Professora"){
@@ -4188,6 +4439,7 @@ function abrirDiaAgenda(data){
       html+="<p style='font-weight:600;margin:0 0 2px;color:var(--tx)'>"+a.aluno+"</p>";
       html+="<p style='font-size:12px;color:var(--mt);margin:0'>"+a.hora+" • "+a.duracao+" min • "+a.professora+"</p>";
       if(presLabel){html+="<p style='font-size:11px;font-weight:600;margin:4px 0 0;color:"+(a.presenca==="falta"?"#D32F2F":a.presenca==="reagendado"?"#9E9E9E":"#2E8FB3")+"'>"+presLabel+"</p>";}
+      html+=reagendamentoLabelHtml(a);
       html+="<div style='display:flex;gap:6px;margin-top:8px'>";
 if(user.role!=="Professora"){
 html+="<button class='btn bsm' style='background:#2E8FB3;color:#fff;border:none' onclick='marcarPresenca("+agendaIdx+",\"presenca\")'><i class='ti ti-check'></i> Presença</button>";
@@ -4277,14 +4529,48 @@ function abrirModalReagendar(idx){
   document.body.appendChild(overlay);
 }
 
+// === HELPERS: LABEL DE REAGENDAMENTO (usado em todas as visualizações da agenda) ===
+function formatDataBR(ds){
+  if(!ds)return "";
+  var p=String(ds).split("-");
+  if(p.length!==3)return ds;
+  return p[2]+"/"+p[1]+"/"+p[0];
+}
+function parseReagendamentoNotas(notas){
+  if(!notas)return null;
+  var str=String(notas);
+  // Novo formato: "REAGENDADA_PARA|2026-07-25|14:00"
+  var parts=str.split("|");
+  if(parts[0]==="REAGENDADA_PARA"&&parts.length>=3){return {tipo:"para",data:parts[1],hora:parts[2]};}
+  if(parts[0]==="REAGENDADA_DE"&&parts.length>=3){return {tipo:"de",data:parts[1],hora:parts[2]};}
+  // Formato antigo: "Aula reagendada de 2026-07-10" ou "Aula reagendada de 2026-07-10 (sem hora)"
+  if(str.indexOf("Aula reagendada de")===0){
+    var match=str.match(/Aula reagendada de (\d{4}-\d{2}-\d{2})/);
+    if(match&&match[1]){
+      return {tipo:"de",data:match[1],hora:"(hora não registrada)"};
+    }
+  }
+  return null;
+}
+// Retorna um <p>/<div> com "↻ Reagendada para..." ou "↻ Reagendada do dia...", ou "" se não aplicável.
+function reagendamentoLabelHtml(a,compact){
+  var info=parseReagendamentoNotas(a.notas);
+  if(!info)return "";
+  var txt=info.tipo==="para"?("↻ Reagendada para "+formatDataBR(info.data)+" às "+info.hora):("↻ Reagendada do dia "+formatDataBR(info.data)+" às "+info.hora);
+  if(compact)return "<div style='font-size:9px;color:#8d6e00;font-weight:600;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"+txt+"</div>";
+  return "<p style='font-size:11px;color:#8d6e00;font-weight:600;font-style:italic;margin:4px 0 0'>"+txt+"</p>";
+}
+
 async function confirmarReagendamento(idx){
   var aula=D.agenda[idx];
   if(!aula)return;
   var novaData=document.getElementById("modal-reagenda-data").value;
   var novaHora=document.getElementById("modal-reagenda-hora").value;
   if(!novaData||!novaHora){alert("Preencha data e hora.");return;}
+  var dataOriginal=aula.data,horaOriginal=aula.hora;
   aula.presenca="reagendado";
   aula.cor="#9E9E9E";
+  aula.notas="REAGENDADA_PARA|"+novaData+"|"+novaHora;
   
   if(!D.agenda)D.agenda=[];
   D.agenda.push({
@@ -4297,7 +4583,7 @@ async function confirmarReagendamento(idx){
     frequencia:aula.frequencia,
     dataFim:aula.dataFim,
     status:"ativo",
-    notas:"Aula reagendada de "+aula.data,
+    notas:"REAGENDADA_DE|"+dataOriginal+"|"+horaOriginal,
     cor:"#FFA726",
     presenca:""
   });
@@ -4358,6 +4644,8 @@ html+="<button class='btn bsm' style='background:#2E8FB3;color:#fff;border:none'
 }
     if(user.role!=="Professora"){html+="<button class='btn bd bsm' onclick='excluirAula("+agendaIdx+")'><i class='ti ti-trash'></i></button>";}
     html+="</td></tr>";
+    var reagLabel=reagendamentoLabelHtml(a);
+    if(reagLabel){html+="<tr><td colspan='6' style='padding:2px 8px 8px;border-top:none'>"+reagLabel+"</td></tr>";}
   });
   html+="</tbody></table></div>";
   return html;
@@ -4400,7 +4688,7 @@ function tendenciaPresencaHtml(mesAtualPfx,percentualAtual){
   mes--;if(mes<1){mes=12;ano--;}
   var pfxAnterior=ano+"-"+String(mes).padStart(2,"0");
   var aulasAnt=(D.agenda||[]).filter(function(a){
-    return a.data.startsWith(pfxAnterior) && a.tipo!=="alerta_contrato" && a.status!=="cancelado" && a.tipo==="regular" && a.presenca!=="reagendado";
+    return a.data.startsWith(pfxAnterior) && a.tipo!=="alerta_contrato" && a.status!=="cancelado" && a.tipo==="regular";
   });
   if(aulasAnt.length===0)return "<div style='font-size:11px;color:var(--mt);margin-top:4px'>Sem dados do mês anterior para comparar</div>";
   var presAnt=aulasAnt.filter(function(a){return a.presenca==="presenca";}).length;
@@ -4433,7 +4721,7 @@ function presencaHtml(){
   
   // Resumo geral do mês - APENAS ALUNOS MATRICULADOS
   var todasAulasDoMes=(D.agenda||[]).filter(function(a){
-    return a.data.startsWith(mesAtualPfx) && a.tipo!=="alerta_contrato" && a.status!=="cancelado" && a.tipo==="regular" && a.presenca!=="reagendado";
+    return a.data.startsWith(mesAtualPfx) && a.tipo!=="alerta_contrato" && a.status!=="cancelado" && a.tipo==="regular";
   });
   
   var totalAulasMes=todasAulasDoMes.length;
@@ -4556,7 +4844,7 @@ function atualizarDashboardPresenca(){
       return nomeBase===alunoSelecionado && a.data.startsWith(mesAtualPfx) && a.tipo!=="alerta_contrato";
     });
     // Para as estatísticas, aulas reagendadas (slot original vago) não contam nem como presença nem falta.
-    var aulasStats=aulasDoAluno.filter(function(a){return a.presenca!=="reagendado";});
+    var aulasStats=aulasDoAluno;
 
     var totalAulas=aulasStats.length;
     var presenças=aulasStats.filter(function(a){return a.presenca==="presenca";}).length;
@@ -4659,7 +4947,7 @@ function exportPDFPresenca(){
 
   // Todas as aulas do mês
   var todasAulas=(D.agenda||[]).filter(function(a){
-    return a.data.startsWith(mesAtual) && a.tipo!=="alerta_contrato" && a.status!=="cancelado" && a.tipo==="regular" && a.presenca!=="reagendado";
+    return a.data.startsWith(mesAtual) && a.tipo!=="alerta_contrato" && a.status!=="cancelado" && a.tipo==="regular";
   });
 
   // Totais gerais
@@ -4902,7 +5190,7 @@ function perfilPresencaHtml(nome,mesPfx){
     var nomeBase=a.aluno.replace(" REAGENDADO","");
     return nomeBase===nome && a.data.startsWith(mesPfx) && a.tipo!=="alerta_contrato";
   });
-  var aulasStats=aulasDoAluno.filter(function(a){return a.presenca!=="reagendado";});
+  var aulasStats=aulasDoAluno;
   var totalAulas=aulasStats.length;
   var presencas=aulasStats.filter(function(a){return a.presenca==="presenca";}).length;
   var faltas=aulasStats.filter(function(a){return a.presenca==="falta";}).length;
@@ -5024,7 +5312,7 @@ function perfilPresencaResumo(nome,mesPfx){
     var nomeBase=a.aluno.replace(" REAGENDADO","");
     return nomeBase===nome && a.data.startsWith(mesPfx) && a.tipo!=="alerta_contrato";
   });
-  var aulasStats=aulasDoAluno.filter(function(a){return a.presenca!=="reagendado";});
+  var aulasStats=aulasDoAluno;
   var totalAulas=aulasStats.length;
   var presencas=aulasStats.filter(function(a){return a.presenca==="presenca";}).length;
   var faltas=aulasStats.filter(function(a){return a.presenca==="falta";}).length;
@@ -5384,6 +5672,174 @@ function prontAlunosLista(){
 var prontAluno="",prontSub="evolucoes",prontEdit=null;
 var prontFicha="motora"; // qual ficha de avaliação está selecionada: "motora" ou "fisio"
 var rpAluno="",rpModo="completo",rpIni="",rpFim="",rpTipo="evolucao",rpAvModo="uma",rpAvData="";
+
+// === BUSCA RÁPIDA DE ALUNO (somente login Catarina/Gestora) ===
+// Permite visualizar o prontuário (somente leitura) de qualquer aluno sem
+// precisar de uma aba "Prontuário" fixa no menu da Gestora.
+var prontLeituraAluno="",prontLeituraSub="evolucoes";
+function filtrarBuscaRapida(q){
+  var resultsDiv=document.getElementById("busca-rapida-resultados");
+  if(!resultsDiv)return;
+  q=(q||"").trim().toLowerCase();
+  if(!q){resultsDiv.style.display="none";resultsDiv.innerHTML="";return;}
+  var lista=prontAlunosLista().filter(function(a){return a.nome.toLowerCase().indexOf(q)>=0;}).slice(0,8);
+  if(lista.length===0){
+    resultsDiv.innerHTML="<div style='padding:10px 12px;font-size:12px;color:var(--mt)'>Nenhum aluno encontrado</div>";
+    resultsDiv.style.display="block";
+    return;
+  }
+  resultsDiv.innerHTML=lista.map(function(a){
+    return "<div style='padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center' onmousedown='abrirProntuarioLeitura(\""+a.nome.replace(/"/g,"&quot;")+"\")'>"
+      +"<span style='display:flex;align-items:center;gap:6px'><i class='ti ti-user' style='font-size:12px;color:var(--mt)'></i>"+a.nome+"</span>"
+      +(a.st==="Cancelado"?"<span style='font-size:9px;color:#D32F2F;font-weight:700;background:#FFEBEE;padding:2px 6px;border-radius:4px'>CANCELADO</span>":"")
+      +"</div>";
+  }).join("");
+  resultsDiv.style.display="block";
+}
+document.addEventListener("click",function(e){
+  var box=document.getElementById("busca-rapida-resultados");
+  var inp=document.getElementById("busca-rapida-input");
+  if(box&&inp&&e.target!==inp&&!box.contains(e.target)){box.style.display="none";}
+});
+
+// === BUSCA RÁPIDA DE PAGAMENTOS (aba Pagamentos — Catarina e Secretária) ===
+// Abre o perfil do aluno (mesmo modal da aba Alunos) já na aba Pagamentos.
+function filtrarBuscaPagamento(q){
+  var resultsDiv=document.getElementById("busca-pag-resultados");
+  if(!resultsDiv)return;
+  q=(q||"").trim().toLowerCase();
+  if(!q){resultsDiv.style.display="none";resultsDiv.innerHTML="";return;}
+  var lista=prontAlunosLista().filter(function(a){return a.nome.toLowerCase().indexOf(q)>=0;}).slice(0,8);
+  if(lista.length===0){
+    resultsDiv.innerHTML="<div style='padding:10px 12px;font-size:12px;color:var(--mt)'>Nenhum aluno encontrado</div>";
+    resultsDiv.style.display="block";
+    return;
+  }
+  resultsDiv.innerHTML=lista.map(function(a){
+    return "<div style='padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center' onmousedown='abrirPagamentosAluno(\""+a.nome.replace(/"/g,"&quot;")+"\")'>"
+      +"<span style='display:flex;align-items:center;gap:6px'><i class='ti ti-cash' style='font-size:12px;color:var(--mt)'></i>"+a.nome+"</span>"
+      +(a.st==="Cancelado"?"<span style='font-size:9px;color:#D32F2F;font-weight:700;background:#FFEBEE;padding:2px 6px;border-radius:4px'>CANCELADO</span>":"")
+      +"</div>";
+  }).join("");
+  resultsDiv.style.display="block";
+}
+document.addEventListener("click",function(e){
+  var box=document.getElementById("busca-pag-resultados");
+  var inp=document.getElementById("busca-pag-input");
+  if(box&&inp&&e.target!==inp&&!box.contains(e.target)){box.style.display="none";}
+});
+function abrirPagamentosAluno(nome){
+  var resultsDiv=document.getElementById("busca-pag-resultados");
+  if(resultsDiv){resultsDiv.style.display="none";resultsDiv.innerHTML="";}
+  var inp=document.getElementById("busca-pag-input");
+  if(inp)inp.value="";
+  abrirPerfilAluno(nome);
+  setTimeout(function(){switchPTab(2);},0);
+}
+function abrirProntuarioLeitura(nome){
+  prontLeituraAluno=nome;
+  prontLeituraSub="evolucoes";
+  var resultsDiv=document.getElementById("busca-rapida-resultados");
+  if(resultsDiv){resultsDiv.style.display="none";resultsDiv.innerHTML="";}
+  var inp=document.getElementById("busca-rapida-input");
+  if(inp)inp.value="";
+  renderProntuarioLeituraModal();
+}
+function trocarSubProntLeitura(sub){
+  prontLeituraSub=sub;
+  renderProntuarioLeituraModal();
+}
+// Card de status do contrato (vencimento) para a busca rápida da Catarina.
+function contratoStatusResumoHtml(nome){
+  var a=todosObj().find(function(x){return x.nome===nome;});
+  if(!a)return "";
+  var venc=calcVencContrato(a.dataMatricula,a.plano);
+  var isCan=eCanc(nome);
+  var st=statusContrato(venc,isCan);
+  var corMap={bg:"#2E7D32",bam:"#F57F17",br2:"#C62828"};
+  var bgMap={bg:"#E8F5E9",bam:"#FFF8E1",br2:"#FFEBEE"};
+  var cor=corMap[st.cls]||"var(--mt)";
+  var bgc=bgMap[st.cls]||"var(--b2)";
+  return "<div class='card' style='margin-bottom:14px;background:"+bgc+";border-left:4px solid "+cor+"'>"
+    +"<div style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px'>"
+    +"<div><p style='font-size:10px;color:var(--mt);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:0 0 3px'><i class='ti ti-file-certificate'></i> Contrato</p>"
+    +"<p style='font-size:14px;font-weight:800;color:"+cor+";margin:0'>"+st.label+(venc?" — vence em "+fd(venc):"")+"</p></div>"
+    +"<span style='font-size:11px;color:var(--mt)'>Plano: <strong>"+a.plano+"</strong></span>"
+    +"</div></div>";
+}
+// Card de status do feedback (próximo envio, ciclo de 60 dias) para a busca rápida.
+function feedbackStatusResumoHtml(nome){
+  var a=todosObj().find(function(x){return x.nome===nome;});
+  if(!a)return "";
+  var info=_feedbackInfoAluno(a);
+  var corMap={atrasado:"#C62828",embreve:"#F57F17",semenvio:"#7B5EA7",emdia:"#2E7D32"};
+  var bgMap={atrasado:"#FFEBEE",embreve:"#FFF8E1",semenvio:"#F1EBFB",emdia:"#E8F5E9"};
+  var labelMap={atrasado:"Atrasado",embreve:"Em breve",semenvio:"Sem 1º envio",emdia:"Em dia"};
+  var cor=corMap[info.status],bgc=bgMap[info.status],label=labelMap[info.status];
+  var txt=label;
+  if(info.proximo){
+    txt+=" — próximo envio: "+fd(info.proximo);
+    if(info.status==="atrasado"&&info.diasRestantes!==null)txt+=" ("+Math.abs(info.diasRestantes)+" dia"+(Math.abs(info.diasRestantes)===1?"":"s")+" atrasado)";
+  }
+  return "<div class='card' style='margin-bottom:14px;background:"+bgc+";border-left:4px solid "+cor+"'>"
+    +"<div style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px'>"
+    +"<div><p style='font-size:10px;color:var(--mt);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:0 0 3px'><i class='ti ti-message-circle-2'></i> Feedback</p>"
+    +"<p style='font-size:14px;font-weight:800;color:"+cor+";margin:0'>"+txt+"</p></div>"
+    +(info.ultimo?"<span style='font-size:11px;color:var(--mt)'>Último envio: <strong>"+fd(info.ultimo.data)+"</strong></span>":"")
+    +"</div></div>";
+}
+function renderProntuarioLeituraModal(){
+  var nome=prontLeituraAluno;
+  if(!nome)return;
+  var subs=[["evolucoes","Evoluções"],["avaliacoes","Avaliações"],["plano","Plano"],["feedback","Feedback"],["historico","Histórico"]];
+  var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\">";
+  html+="<div class='modal' onclick='event.stopPropagation()' style='max-width:640px;width:94vw;max-height:88vh;overflow-y:auto'>";
+  html+="<div style='display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;gap:8px'>";
+  html+="<p class='ct' style='margin:0'><i class='ti ti-notes'></i> Prontuário — "+nome+"<br><span style='font-size:11px;font-weight:500;color:var(--mt)'><i class='ti ti-eye'></i> Somente leitura</span></p>";
+  html+="<button class='btn bsm' onclick='closeModal()'><i class='ti ti-x'></i></button>";
+  html+="</div>";
+  html+=perfilDadosBasicosResumo(nome);
+  html+=contratoStatusResumoHtml(nome);
+  html+=feedbackStatusResumoHtml(nome);
+  html+="<div style='display:flex;gap:4px;margin:14px 0;flex-wrap:wrap'>";
+  subs.forEach(function(s){html+="<button class='tab"+(prontLeituraSub===s[0]?" active":"")+"' onclick='trocarSubProntLeitura(\""+s[0]+"\")'>"+s[1]+"</button>";});
+  html+="</div>";
+  if(prontLeituraSub==="feedback"){html+=perfilPresencaResumo(nome,mesAtualPfx());}
+  if(prontLeituraSub==="historico"){
+    var hist=(D.historico||[]).filter(function(h){return h.nome===nome;});
+    html+="<div class='card'><p class='ct'><i class='ti ti-history'></i> Histórico ("+hist.length+")</p>";
+    if(hist.length===0){html+="<p class='empty'>Nenhum histórico registrado.</p>";}
+    else{
+      html+="<div style='max-height:340px;overflow-y:auto'>"+hist.map(function(h){
+        var isCancelado=String(h.evento||"")==="cancelado";
+        var isMatricula=h.evento==="matricula";
+        return "<div class='timeline-item "+(isCancelado?"tl-red":isMatricula?"tl-teal":"")+"'>"
+          +"<div style='display:flex;align-items:center;gap:8px;margin-bottom:6px'>"
+          +"<span class='badge "+(isCancelado?"br2":isMatricula?"btl":"bb")+"'>"
+          +(isCancelado?"<i class='ti ti-x'></i> Cancelado":isMatricula?"<i class='ti ti-user-plus'></i> 1ª Matrícula":"<i class='ti ti-repeat'></i> Renovação")
+          +"</span>"
+          +(h.dataRenovacao?"<span style='font-size:11px;color:var(--mt)'>Renovado: "+fd(h.dataRenovacao)+"</span>":"")
+          +"</div>"
+          +"<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:12px'>"
+          +"<div><span style='color:var(--mt)'>Matrícula:</span><br><strong>"+(h.dataMatricula?fd(h.dataMatricula):"—")+"</strong></div>"
+          +"<div><span style='color:var(--mt)'>Vencimento:</span><br><strong>"+(h.vencimento?fd(h.vencimento):"Mensal")+"</strong></div>"
+          +"<div><span style='color:var(--mt)'>Valor:</span><br><strong>"+BRL(h.valor)+"</strong></div>"
+          +"</div></div>";
+      }).join("")+"</div>";
+    }
+    html+="</div></div></div>";
+    document.getElementById("mc").innerHTML=html;
+    return;
+  }
+  var recs=(D.pront||[]).filter(function(r){return r.aluno===nome&&r.tipo===prontLeituraSub;}).sort(function(a,b){return String(b.data).localeCompare(String(a.data));});
+  html+="<div class='card'><p class='ct'><i class='ti ti-list'></i> Registros ("+recs.length+")</p>";
+  if(recs.length===0)html+="<p class='empty'>Nenhum registro ainda.</p>";
+  recs.forEach(function(r){
+    html+="<div class='card c0' style='margin-bottom:8px;border-left:4px solid var(--brand)'>"+prontResumo(r)+"</div>";
+  });
+  html+="</div></div></div>";
+  document.getElementById("mc").innerHTML=html;
+}
 
 function prDados(r){try{if(!r.dados)return{};return typeof r.dados==="string"?JSON.parse(r.dados):r.dados;}catch(e){return{};}}
 async function _saveProntNow(){
