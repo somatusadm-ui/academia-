@@ -5734,8 +5734,71 @@ function abrirPagamentosAluno(nome){
   if(resultsDiv){resultsDiv.style.display="none";resultsDiv.innerHTML="";}
   var inp=document.getElementById("busca-pag-input");
   if(inp)inp.value="";
-  abrirPerfilAluno(nome);
-  setTimeout(function(){switchPTab(2);},0);
+  renderPagamentosSomenteModal(nome);
+}
+// Modal enxuto — mostra SOMENTE os pagamentos do aluno (dashboard do mês + histórico),
+// sem as demais abas do perfil (Dados Pessoais, Feedbacks, Histórico, Presença).
+function renderPagamentosSomenteModal(nome){
+  var a=todosObj().find(function(x){return x.nome===nome;});
+  if(!a){alert("Aluno não encontrado.");return;}
+  var isCan=eCanc(nome);
+  var todosPagem=D.pag.filter(function(p){return p.aluno===nome;}).sort(function(a,b){return b.data>a.data?1:-1;});
+  var pfxAtual=mesAtualPfx();
+  var pagAtual=todosPagem.find(function(p){return p.data&&p.data.startsWith(pfxAtual);});
+  var caixaAtual=D.caixa.find(function(c){return c.nome===nome&&c.dataVenc&&c.dataVenc.startsWith(pfxAtual);});
+  var hoje=fdISO(new Date());
+  var statusAtual,diasAtrasado=0;
+  if(pagAtual){statusAtual="pago";}
+  else if(caixaAtual){statusAtual=(caixaAtual.dataVenc<hoje)?"atrasado":"pendente";if(statusAtual==="atrasado"){diasAtrasado=Math.floor((new Date()-new Date(caixaAtual.dataVenc+"T00:00:00"))/(1000*60*60*24));}}
+  else{statusAtual="seminfo";}
+  var statusCor=statusAtual==="pago"?"var(--gn)":statusAtual==="atrasado"?"var(--rd)":statusAtual==="pendente"?"var(--am)":"var(--mt)";
+  var statusBg=statusAtual==="pago"?"var(--gl)":statusAtual==="atrasado"?"var(--rl)":statusAtual==="pendente"?"var(--al)":"var(--b2)";
+  var dashPag="<div class='month-status-card' style='background:"+statusBg+";border-left:4px solid "+statusCor+"'>"
+    +"<p class='month-status-label'>Mês Atual</p>"
+    +"<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px'>"
+    +"<div style='text-align:center'><p style='font-size:11px;color:var(--mt);margin:0 0 4px'>Valor</p><p style='font-size:17px;font-weight:800;margin:0'>"+BRL(a.valor)+"</p></div>"
+    +"<div style='text-align:center'><p style='font-size:11px;color:var(--mt);margin:0 0 4px'>Vencimento</p><p style='font-size:17px;font-weight:800;margin:0'>"+(caixaAtual?"Dia "+caixaAtual.dataVenc.slice(-2):"Dia "+a.diaVenc)+"</p></div>"
+    +"<div style='text-align:center'><p style='font-size:11px;color:var(--mt);margin:0 0 4px'>Status</p>"
+    +(statusAtual==="pago"?"<span class='badge bg'><i class='ti ti-check'></i> Pago em "+fd(pagAtual.data)+"</span>"
+     :statusAtual==="atrasado"?"<span class='badge br2'><i class='ti ti-alert-circle'></i> "+diasAtrasado+" dia"+(diasAtrasado===1?"":"s")+" atrasado</span>"
+     :statusAtual==="pendente"?"<span class='badge bam'><i class='ti ti-clock'></i> Pendente</span>"
+     :"<span class='badge' style='background:var(--b3);color:var(--mt)'>Sem info</span>")
+    +"</div>"
+    +"</div>"
+    +(pagAtual?"<div class='dv' style='margin:10px 0'></div><div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px'>"
+      +"<div><span style='color:var(--mt)'>Bruto:</span> <strong>"+BRL(pagAtual.bruto)+"</strong></div>"
+      +"<div><span style='color:var(--mt)'>Líquido:</span> <strong>"+BRL(pagAtual.liquido)+"</strong></div>"
+      +"<div><span style='color:var(--mt)'>Forma:</span> <strong>"+(pagAtual.forma||"—")+"</strong></div>"
+      +"<div><span style='color:var(--mt)'>Banco:</span> <strong>"+(pagAtual.banco||"—")+"</strong></div>"
+      +"</div>":"")
+    +"</div>";
+  var histPag=todosPagem.length===0
+    ?"<p class='empty' style='padding:1.5rem'>Nenhum pagamento registrado.</p>"
+    :"<div class='ox'><table><thead><tr><th>Data</th><th>Plano</th><th>Bruto</th><th>Líquido</th><th>Forma</th><th>Banco</th></tr></thead><tbody>"
+    +todosPagem.map(function(p){
+      var isAtual=p.data&&p.data.startsWith(pfxAtual);
+      return "<tr style='"+(isAtual?"background:#E8F5E9":"")+";'>"
+        +"<td>"+fd(p.data)+(isAtual?" <span class='badge bg' style='font-size:10px'>Atual</span>":"")+"</td>"
+        +"<td><span class='badge bb' style='font-size:10px'>"+(p.plano||"—")+"</span></td>"
+        +"<td>"+BRL(p.bruto)+"</td><td>"+BRL(p.liquido)+"</td>"
+        +"<td>"+(p.forma||"—")+"</td><td>"+(p.banco||"—")+"</td></tr>";
+    }).join("")+"</tbody></table></div>";
+  var avatarLetras=nome.split(" ").slice(0,2).map(function(w){return w[0];}).join("");
+  var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\">"
+    +"<div class='modal' onclick='event.stopPropagation()' style='width:640px;max-width:96vw;max-height:88vh;overflow-y:auto'>"
+    +"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px'>"
+    +"<div style='display:flex;align-items:center;gap:10px'>"
+    +"<div style='width:38px;height:38px;border-radius:50%;background:var(--brand2);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px'>"+avatarLetras+"</div>"
+    +"<div><p class='ct' style='margin:0'><i class='ti ti-cash'></i> Pagamentos — "+nome+"</p>"
+    +(isCan?"<span class='badge profile-badge' style='font-size:10px'><i class='ti ti-x'></i> Cancelado</span>":"")
+    +"</div></div>"
+    +"<button class='btn bsm' onclick='closeModal()'><i class='ti ti-x'></i></button>"
+    +"</div>"
+    +dashPag
+    +"<p style='font-size:12px;font-weight:700;color:var(--mt);letter-spacing:.05em;text-transform:uppercase;margin:14px 0 10px'>Histórico de Pagamentos</p>"
+    +histPag
+    +"</div></div>";
+  document.getElementById("mc").innerHTML=html;
 }
 function abrirProntuarioLeitura(nome){
   prontLeituraAluno=nome;
