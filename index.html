@@ -4726,13 +4726,13 @@ function presencaHtml(){
   
   var totalAulasMes=todasAulasDoMes.length;
   var presencasMes=todasAulasDoMes.filter(function(a){return a.presenca==="presenca";}).length;
-  var faltasMes=todasAulasDoMes.filter(function(a){return a.presenca==="falta";}).length;
+  var faltasMes=todasAulasDoMes.filter(function(a){return a.presenca==="falta"||a.presenca==="reagendado";}).length;
   var pendenteMes=todasAulasDoMes.filter(function(a){return !a.presenca || a.presenca==="";}).length;
   var percentualMes=totalAulasMes>0?Math.round((presencasMes/totalAulasMes)*100):0;
   
   // Alunos com faltas
   var alunosComFaltas={};
-  todasAulasDoMes.filter(function(a){return a.presenca==="falta";}).forEach(function(a){
+  todasAulasDoMes.filter(function(a){return a.presenca==="falta"||a.presenca==="reagendado";}).forEach(function(a){
     var nomeBase=a.aluno.replace(" REAGENDADO","");
     alunosComFaltas[nomeBase]=(alunosComFaltas[nomeBase]||0)+1;
   });
@@ -4843,12 +4843,12 @@ function atualizarDashboardPresenca(){
       var nomeBase=a.aluno.replace(" REAGENDADO","");
       return nomeBase===alunoSelecionado && a.data.startsWith(mesAtualPfx) && a.tipo!=="alerta_contrato";
     });
-    // Para as estatísticas, aulas reagendadas (slot original vago) não contam nem como presença nem falta.
+    // Aulas reagendadas (slot original vago) contam como FALTA nas estatísticas — mesma regra de antes.
     var aulasStats=aulasDoAluno;
 
     var totalAulas=aulasStats.length;
     var presenças=aulasStats.filter(function(a){return a.presenca==="presenca";}).length;
-    var faltas=aulasStats.filter(function(a){return a.presenca==="falta";}).length;
+    var faltas=aulasStats.filter(function(a){return a.presenca==="falta"||a.presenca==="reagendado";}).length;
     var reagendados=aulasDoAluno.filter(function(a){return a.aluno.includes("REAGENDADO");}).length;
     var percentualPresença=totalAulas>0?Math.round((presenças/totalAulas)*100):0;
 
@@ -4856,11 +4856,11 @@ function atualizarDashboardPresenca(){
     // pois uma sequência de faltas pode atravessar a virada do mês).
     var historicoCompleto=(D.agenda||[]).filter(function(a){
       var nomeBase=a.aluno.replace(" REAGENDADO","");
-      return nomeBase===alunoSelecionado && a.tipo==="regular" && a.status!=="cancelado" && (a.presenca==="presenca"||a.presenca==="falta");
+      return nomeBase===alunoSelecionado && a.tipo==="regular" && a.status!=="cancelado" && (a.presenca==="presenca"||a.presenca==="falta"||a.presenca==="reagendado");
     }).sort(function(a,b){return a.data.localeCompare(b.data)||(a.hora||"").localeCompare(b.hora||"");});
     var faltasConsecutivas=0;
     for(var _fi=historicoCompleto.length-1;_fi>=0;_fi--){
-      if(historicoCompleto[_fi].presenca==="falta")faltasConsecutivas++;
+      if(historicoCompleto[_fi].presenca==="falta"||historicoCompleto[_fi].presenca==="reagendado")faltasConsecutivas++;
       else break;
     }
     
@@ -4953,7 +4953,7 @@ function exportPDFPresenca(){
   // Totais gerais
   var totalGeral=todasAulas.length;
   var presGeral=todasAulas.filter(function(a){return a.presenca==="presenca";}).length;
-  var faltasGeral=todasAulas.filter(function(a){return a.presenca==="falta";}).length;
+  var faltasGeral=todasAulas.filter(function(a){return a.presenca==="falta"||a.presenca==="reagendado";}).length;
   var pendGeral=todasAulas.filter(function(a){return !a.presenca||a.presenca==="";}).length;
   var pctGeral=totalGeral>0?Math.round((presGeral/totalGeral)*100):0;
 
@@ -4965,7 +4965,7 @@ function exportPDFPresenca(){
     });
     if(aulasAluno.length===0) return;
     var pres=aulasAluno.filter(function(a){return a.presenca==="presenca";}).length;
-    var falt=aulasAluno.filter(function(a){return a.presenca==="falta";}).length;
+    var falt=aulasAluno.filter(function(a){return a.presenca==="falta"||a.presenca==="reagendado";}).length;
     var reag=aulasAluno.filter(function(a){return a.aluno.includes("REAGENDADO");}).length;
     var total=aulasAluno.length;
     var pct=total>0?Math.round((pres/total)*100):0;
@@ -4977,6 +4977,7 @@ function exportPDFPresenca(){
       var sta="—",stCor="#888";
       if(a.presenca==="presenca"){sta="✓ Presença";stCor="#4CAF50";}
       else if(a.presenca==="falta"){sta="✗ Falta";stCor="#D32F2F";}
+      else if(a.presenca==="reagendado"){sta="↻ Reagendada (falta)";stCor="#9E9E9E";}
       var dataFmt=a.data.split("-").reverse().join("/");
       var reagTag=a.aluno.includes("REAGENDADO")?" <em style='color:#FF9800;font-size:10px'>[reagendado]</em>":"";
       detalheLinhas+="<tr style='font-size:11px'>"
@@ -5014,7 +5015,7 @@ function exportPDFPresenca(){
       var aulasAluno=todasAulas.filter(function(a){return a.aluno.replace(" REAGENDADO","")===nome;});
       if(aulasAluno.length===0) return;
       var pres=aulasAluno.filter(function(a){return a.presenca==="presenca";}).length;
-      var falt=aulasAluno.filter(function(a){return a.presenca==="falta";}).length;
+      var falt=aulasAluno.filter(function(a){return a.presenca==="falta"||a.presenca==="reagendado";}).length;
       var reag=aulasAluno.filter(function(a){return a.aluno.includes("REAGENDADO");}).length;
       var total=aulasAluno.length;
       var pct=total>0?Math.round((pres/total)*100):0;
@@ -5193,17 +5194,17 @@ function perfilPresencaHtml(nome,mesPfx){
   var aulasStats=aulasDoAluno;
   var totalAulas=aulasStats.length;
   var presencas=aulasStats.filter(function(a){return a.presenca==="presenca";}).length;
-  var faltas=aulasStats.filter(function(a){return a.presenca==="falta";}).length;
+  var faltas=aulasStats.filter(function(a){return a.presenca==="falta"||a.presenca==="reagendado";}).length;
   var reagendados=aulasDoAluno.filter(function(a){return a.aluno.includes("REAGENDADO");}).length;
   var pct=totalAulas>0?Math.round(presencas/totalAulas*100):0;
 
   var historicoCompleto=(D.agenda||[]).filter(function(a){
     var nomeBase=a.aluno.replace(" REAGENDADO","");
-    return nomeBase===nome && a.tipo==="regular" && a.status!=="cancelado" && (a.presenca==="presenca"||a.presenca==="falta");
+    return nomeBase===nome && a.tipo==="regular" && a.status!=="cancelado" && (a.presenca==="presenca"||a.presenca==="falta"||a.presenca==="reagendado");
   }).sort(function(a,b){return a.data.localeCompare(b.data)||(a.hora||"").localeCompare(b.hora||"");});
   var faltasConsecutivas=0;
   for(var _i=historicoCompleto.length-1;_i>=0;_i--){
-    if(historicoCompleto[_i].presenca==="falta")faltasConsecutivas++;else break;
+    if(historicoCompleto[_i].presenca==="falta"||historicoCompleto[_i].presenca==="reagendado")faltasConsecutivas++;else break;
   }
 
   var h="<div class='kg' style='grid-template-columns:repeat(2,1fr);margin-bottom:16px'>";
@@ -5315,16 +5316,16 @@ function perfilPresencaResumo(nome,mesPfx){
   var aulasStats=aulasDoAluno;
   var totalAulas=aulasStats.length;
   var presencas=aulasStats.filter(function(a){return a.presenca==="presenca";}).length;
-  var faltas=aulasStats.filter(function(a){return a.presenca==="falta";}).length;
+  var faltas=aulasStats.filter(function(a){return a.presenca==="falta"||a.presenca==="reagendado";}).length;
   var pct=totalAulas>0?Math.round(presencas/totalAulas*100):0;
 
   var historicoCompleto=(D.agenda||[]).filter(function(a){
     var nomeBase=a.aluno.replace(" REAGENDADO","");
-    return nomeBase===nome && a.tipo==="regular" && a.status!=="cancelado" && (a.presenca==="presenca"||a.presenca==="falta");
+    return nomeBase===nome && a.tipo==="regular" && a.status!=="cancelado" && (a.presenca==="presenca"||a.presenca==="falta"||a.presenca==="reagendado");
   }).sort(function(a,b){return a.data.localeCompare(b.data)||(a.hora||"").localeCompare(b.hora||"");});
   var faltasConsecutivas=0;
   for(var _i=historicoCompleto.length-1;_i>=0;_i--){
-    if(historicoCompleto[_i].presenca==="falta")faltasConsecutivas++;else break;
+    if(historicoCompleto[_i].presenca==="falta"||historicoCompleto[_i].presenca==="reagendado")faltasConsecutivas++;else break;
   }
   var alertaTxt=faltasConsecutivas>=2?faltasConsecutivas+" faltas consecutivas":(pct<=75&&totalAulas>0?"Presença baixa este mês":"");
   var alertaCor=faltasConsecutivas>=2?"#B71C1C":"#D32F2F";
