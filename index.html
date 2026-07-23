@@ -3504,6 +3504,7 @@ function relHtml(){
         +"<button class='btn' style='background:var(--gl);color:var(--gn);border-color:var(--gl)' onclick='exportPDFMovimentacoes()'><i class='ti ti-users'></i> PDF Movimentações (matrículas)</button>"
         +"<button class='btn' style='background:#f0f0f0;color:#555;border-color:#ddd' onclick='exportDocx()'><i class='ti ti-file-word'></i> Declaração (Word)</button>"
         +"<button class='btn' style='background:#e8f5e9;color:#2e7d32;border-color:#c8e6c9' onclick='exportPDFCaixa()'><i class='ti ti-currency-dollar'></i> Com Caixa do Mês</button>"
+        +"<button class='btn' style='background:#0b1e35;color:#fff;border:none' onclick='exportPDFContador()'><i class='ti ti-calculator'></i> Exportação para o Contador</button>"
         +"<button class='btn' onclick='exportCSV()'><i class='ti ti-file-spreadsheet'></i> CSV (Excel)</button>"
         +"</div></div>"
       : // Secretária: PDF Simplificado + Movimentações
@@ -3514,6 +3515,64 @@ function relHtml(){
         +"<button class='btn' style='background:var(--gl);color:var(--gn);border-color:var(--gl)' onclick='exportPDFMovimentacoes()'><i class='ti ti-users'></i> PDF Movimentações (matrículas)</button>"
         +"</div></div>"
     );
+}
+function exportPDFContador(){
+  if(!mesAtualRel){var _d=new Date();mesAtualRel=String(_d.getMonth()+1).padStart(2,"0")+"/"+_d.getFullYear();}
+  var _ma=mesAtualRel.split("/"),_rm=String(+_ma[0]).padStart(2,"0"),_ra=_ma[1];
+  var pfxRel=_ra+"-"+_rm+"-",pfxMes=_ra+"-"+_rm;
+  var mlbl=["","Janeiro","Fevereiro","Mar\u00e7o","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  var labelMes=mlbl[+_rm]+"/"+_ra;
+
+  var pagRel=D.pag.filter(function(p){return p.data&&p.data.startsWith(pfxRel);});
+  var despRel=D.desp.filter(function(d){return d.data&&d.data.startsWith(pfxRel);});
+  var bruto=pagRel.reduce(function(a,p){return a+(+p.bruto||0);},0);
+  var liquido=pagRel.reduce(function(a,p){return a+(+p.liquido||0);},0);
+  var despTotal=despRel.reduce(function(a,d){return a+(+d.valor||0);},0);
+  var fx=despRel.filter(function(d){return d.tipo==="Fixa";}).reduce(function(a,d){return a+(+d.valor||0);},0);
+  var vr=despRel.filter(function(d){return d.tipo!=="Fixa";}).reduce(function(a,d){return a+(+d.valor||0);},0);
+  var royalties=bruto*0.075;
+  var F=_folhaMes(pfxMes);
+  var resultado=liquido-despTotal-F.totalGeral;
+
+  var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap' rel='stylesheet'>"+pdfCssPremium()+"</head><body><div class='sheet'>";
+  h+=pdfHeaderPremium("Contabilidade","Relat\u00f3rio para o Contador","M\u00eas de refer\u00eancia: "+labelMes,"Faturamento, despesas, folha de pagamento e resultado consolidados");
+  h+="<div class='pdf-body'>";
+
+  h+="<div class='pdf-section-title'>Faturamento</div>";
+  h+="<table class='pdf-tbl'><tbody>";
+  h+="<tr><td>Faturamento bruto</td><td style='font-weight:700'>"+BRL(bruto)+"</td></tr>";
+  h+="<tr><td>Faturamento l\u00edquido</td><td style='font-weight:700'>"+BRL(liquido)+"</td></tr>";
+  h+="<tr><td>Royalties (7,5% sobre o bruto)</td><td style='font-weight:700'>"+BRL(royalties)+"</td></tr>";
+  h+="</tbody></table>";
+
+  h+="<div class='pdf-section-title'>Despesas</div>";
+  h+="<table class='pdf-tbl'><tbody>";
+  h+="<tr><td>Despesas fixas</td><td style='font-weight:700'>"+BRL(fx)+"</td></tr>";
+  h+="<tr><td>Despesas vari\u00e1veis</td><td style='font-weight:700'>"+BRL(vr)+"</td></tr>";
+  h+="<tr><td style='font-weight:800'>Total de despesas</td><td style='font-weight:800'>"+BRL(despTotal)+"</td></tr>";
+  h+="</tbody></table>";
+
+  h+="<div class='pdf-section-title'>Folha de pagamento</div>";
+  h+="<table class='pdf-tbl'><tbody>";
+  h+="<tr><td>Nicoli</td><td style='font-weight:700'>"+BRL(F.nicoli.total)+"</td></tr>";
+  h+="<tr><td>Amanda</td><td style='font-weight:700'>"+BRL(F.amanda.total)+"</td></tr>";
+  h+="<tr><td style='font-weight:800'>Total da folha</td><td style='font-weight:800'>"+BRL(F.totalGeral)+"</td></tr>";
+  h+="</tbody></table>";
+
+  h+="<div class='pdf-section-title'>Resultado do m\u00eas</div>";
+  h+="<table class='pdf-tbl'><tbody>";
+  h+="<tr><td>Faturamento l\u00edquido</td><td style='font-weight:700'>"+BRL(liquido)+"</td></tr>";
+  h+="<tr><td>( \u2212 ) Despesas</td><td style='font-weight:700;color:#c62828'>-"+BRL(despTotal)+"</td></tr>";
+  h+="<tr><td>( \u2212 ) Folha de pagamento</td><td style='font-weight:700;color:#c62828'>-"+BRL(F.totalGeral)+"</td></tr>";
+  h+="<tr><td style='font-weight:800;color:"+(resultado>=0?"#2e7d32":"#c62828")+"'>Resultado l\u00edquido do m\u00eas</td><td style='font-weight:800;color:"+(resultado>=0?"#2e7d32":"#c62828")+"'>"+BRL(resultado)+"</td></tr>";
+  h+="</tbody></table>";
+
+  h+="</div>";
+  h+=pdfFooterPremium();
+  h+="</div></body></html>";
+  var w=window.open("","_blank","width=900,height=700");if(!w){alert("Bloqueador de pop-up ativado.");return;}
+  w.document.write(h);w.document.close();w.focus();
+  setTimeout(function(){w.print();},1200);
 }
 function exportCSV(){
   var t=totP();
@@ -6964,7 +7023,7 @@ function gerarPDFNaoFecharamMes(){
 var FUNC_PONTO=["Nicoli","Amanda"];
 var mesAtualPonto=null,funcPontoSel="Nicoli",pontoEditId=null,pontoSubTab="ponto";
 var PONTO_H=["id","func","data","tipo","entMin","salMin","retMin","saiMin","qtdMin","obs"];
-var SAL_H=["id","func","mes","holerite","valeDias","valeValorUnit","salarioFixo","aulasExtrasQtd","aulasExtrasValorUnit","aulasExpQtd","aulasExpValorUnit","descDiasQtd","descDiasValorUnit","descExtraDesc","descExtraValor"];
+var SAL_H=["id","func","mes","dataPagamento","holerite","valeDias","valeValorUnit","salarioFixo","aulasExtrasQtd","aulasExtrasValorUnit","aulasExpQtd","aulasExpValorUnit","descDiasQtd","descDiasValorUnit","descExtraDesc","descExtraValor"];
 var _salAlertMsg=null; // {ok:bool,msg:string} — sobrevive ao refreshContent para mostrar o resultado real do salvamento
 function setPontoSubTab(v){pontoSubTab=v;refreshContent();}
 var PONTO_TIPO_LBL={normal:"Registro de ponto",atestado_dia:"Atestado (dia inteiro)",atestado_horas:"Atestado (horas)",falta_dia:"Falta n\u00e3o justificada (dia)",falta_horas:"Falta n\u00e3o justificada (horas)",feriado:"Feriado"};
@@ -7041,14 +7100,21 @@ function pontoHtml(){
   if(isSecP)funcPontoSel="Nicoli";
   if(isProfP)funcPontoSel="Amanda";
   if(!pontoSubTab)pontoSubTab="ponto";
+  if(!isCatP&&(pontoSubTab==="folha"||pontoSubTab==="anual"))pontoSubTab="ponto";
 
   var htmlTop="<div class='content'>";
-  htmlTop+="<div style='display:flex;gap:8px;margin-bottom:14px'>";
+  htmlTop+="<div style='display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap'>";
   htmlTop+="<button class='tab"+(pontoSubTab==="ponto"?" active":"")+"' onclick='setPontoSubTab(\"ponto\")'><i class='ti ti-clock'></i> Ponto CLT</button>";
   htmlTop+="<button class='tab"+(pontoSubTab==="salario"?" active":"")+"' onclick='setPontoSubTab(\"salario\")'><i class='ti ti-cash'></i> Sal\u00e1rio</button>";
+  if(isCatP){
+    htmlTop+="<button class='tab"+(pontoSubTab==="folha"?" active":"")+"' onclick='setPontoSubTab(\"folha\")'><i class='ti ti-report-money'></i> Folha de Pagamento</button>";
+    htmlTop+="<button class='tab"+(pontoSubTab==="anual"?" active":"")+"' onclick='setPontoSubTab(\"anual\")'><i class='ti ti-chart-bar'></i> Vis\u00e3o Anual</button>";
+  }
   htmlTop+="</div>";
 
   if(pontoSubTab==="salario")return htmlTop+salarioHtml(isCatP)+"</div>";
+  if(pontoSubTab==="folha"&&isCatP)return htmlTop+folhaHtml()+"</div>";
+  if(pontoSubTab==="anual"&&isCatP)return htmlTop+visaoAnualHtml()+"</div>";
 
   var pfx=_pfxPonto();
   // Op\u00e7\u00f5es de m\u00eas: meses com registro + m\u00eas atual
@@ -7286,9 +7352,26 @@ function salarioHtml(podeEditar){
   var mm=pfx.split("-"),labelMes=mlbl[+mm[1]]+"/"+mm[0];
   var inp="font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)";
   var rec=_salRec(funcPontoSel,pfx);
+  // Seletor de m\u00eas pr\u00f3prio da aba Sal\u00e1rio (independente do Ponto), pra dar pra lan\u00e7ar
+  // sal\u00e1rios retroativos sem precisar trocar de m\u00eas na aba Ponto.
+  var meses=new Set([pfx]);
+  var hoje=new Date();meses.add(hoje.getFullYear()+"-"+String(hoje.getMonth()+1).padStart(2,"0"));
+  (D.salario||[]).forEach(function(r){if(r.mes)meses.add(String(r.mes).substring(0,7));});
+  (D.ponto||[]).forEach(function(r){if(r.data)meses.add(String(r.data).substring(0,7));});
+  // Inclui tamb\u00e9m alguns meses anteriores, pra facilitar lan\u00e7ar retroativo mesmo sem
+  // nenhum outro dado ainda registrado naquele m\u00eas.
+  var _dRef=new Date();
+  for(var _b=0;_b<12;_b++){var _dd=new Date(_dRef.getFullYear(),_dRef.getMonth()-_b,1);meses.add(_dd.getFullYear()+"-"+String(_dd.getMonth()+1).padStart(2,"0"));}
+  var mlbl3=["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  var optsMes=Array.from(meses).sort().reverse().map(function(m){
+    var p=m.split("-"),val=String(+p[1]).padStart(2,"0")+"/"+p[0];
+    return "<option value='"+val+"'"+(mesAtualPonto===val?" selected":"")+">"+mlbl3[+p[1]]+"/"+p[0]+"</option>";
+  }).join("");
   var html="";
   html+="<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px'>";
-  html+="<div class='ct' style='margin-bottom:0'><i class='ti ti-cash'></i> Sal\u00e1rio \u2014 "+funcPontoSel+" <span style='font-weight:500;font-size:12px;color:var(--mt)'>(m\u00eas de refer\u00eancia: "+labelMes+")</span></div>";
+  html+="<div class='ct' style='margin-bottom:0'><i class='ti ti-cash'></i> Sal\u00e1rio \u2014 "+funcPontoSel+"</div>";
+  if(podeEditar)html+="<div class='fi' style='margin-bottom:0'><label style='font-size:11px;font-weight:600;color:var(--mt);display:block;margin-bottom:4px'>M\u00caS DE REFER\u00caNCIA</label><select onchange='setMesPonto(this.value)' style='font-size:13px;padding:7px 10px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'>"+optsMes+"</select></div>";
+  else html+="<span style='font-weight:500;font-size:12px;color:var(--mt)'>M\u00eas de refer\u00eancia: "+labelMes+"</span>";
   html+="</div>";
 
   if(funcPontoSel==="Nicoli"){
@@ -7297,6 +7380,7 @@ function salarioHtml(podeEditar){
     var holerite=_n(rec.holerite);
     var total=holerite+valeTotal;
     html+="<div class='card'>";
+    html+="<div class='fi' style='margin-bottom:14px'><label>Data de pagamento</label><input type='date' id='sal-data-pgto' value='"+(rec.dataPagamento||"")+"' "+(podeEditar?"":"disabled")+" style='"+inp+"'></div>";
     html+="<div class='fi' style='margin-bottom:14px'><label>Sal\u00e1rio CLT (holerite)</label><input type='number' step='0.01' id='sal-holerite' value='"+(rec.holerite||"")+"' "+(podeEditar?"oninput='calcSalarioNicoli()'":"disabled")+" placeholder='R$ 0,00' style='"+inp+"'></div>";
     html+="<p style='font-size:12px;font-weight:700;color:var(--mt);margin:0 0 8px'>VALE A</p>";
     html+="<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px'>";
@@ -7317,6 +7401,7 @@ function salarioHtml(podeEditar){
     var deValor=_n(rec.descExtraValor);
     var total=sFixo+aeTotal+axTotal-ddTotal-deValor;
     html+="<div class='card'>";
+    html+="<div class='fi' style='margin-bottom:14px'><label>Data de pagamento</label><input type='date' id='sal-data-pgto' value='"+(rec.dataPagamento||"")+"' "+(podeEditar?"":"disabled")+" style='"+inp+"'></div>";
     html+="<div class='fi' style='margin-bottom:14px'><label>Sal\u00e1rio fixo</label><input type='number' step='0.01' id='sal-fixo' value='"+sFixo+"' "+(podeEditar?"oninput='calcSalarioAmanda()'":"disabled")+" style='"+inp+"'></div>";
 
     html+="<p style='font-size:12px;font-weight:700;color:var(--mt);margin:0 0 8px'>AULAS EXTRAS FIXAS (fora do hor\u00e1rio)</p>";
@@ -7384,6 +7469,7 @@ async function salvarSalarioNicoli(){
   if(!_umaVez("salvarSalarioNicoli"))return;
   var pfx=_pfxPonto();
   _upsertSalario("Nicoli",pfx,{
+    dataPagamento:document.getElementById("sal-data-pgto").value,
     holerite:document.getElementById("sal-holerite").value,
     valeDias:document.getElementById("sal-vale-dias").value,
     valeValorUnit:document.getElementById("sal-vale-unit").value
@@ -7403,6 +7489,7 @@ async function salvarSalarioAmanda(){
   if(!_umaVez("salvarSalarioAmanda"))return;
   var pfx=_pfxPonto();
   _upsertSalario("Amanda",pfx,{
+    dataPagamento:document.getElementById("sal-data-pgto").value,
     salarioFixo:document.getElementById("sal-fixo").value,
     aulasExtrasQtd:document.getElementById("sal-ae-qtd").value,
     aulasExtrasValorUnit:document.getElementById("sal-ae-unit").value,
@@ -7423,7 +7510,186 @@ async function salvarSalarioAmanda(){
   refreshContent();
 }
 
-// - excedentes: dias trabalhados AL\u00c9M das 8h de contrato (fora do hor\u00e1rio)
+// ===== FOLHA DE PAGAMENTO CONSOLIDADA (s\u00f3 Gestora) =====
+function _folhaMes(pfx){
+  var rN=_salRec("Nicoli",pfx);
+  var valeDias=_n(rN.valeDias),valeUnit=(rN.valeValorUnit!==""&&rN.valeValorUnit!==undefined)?_n(rN.valeValorUnit):5;
+  var valeTotal=valeDias*valeUnit,holerite=_n(rN.holerite),totalNicoli=holerite+valeTotal;
+
+  var rA=_salRec("Amanda",pfx);
+  var sFixo=(rA.salarioFixo!==""&&rA.salarioFixo!==undefined)?_n(rA.salarioFixo):5000;
+  var aeQ=_n(rA.aulasExtrasQtd),aeU=(rA.aulasExtrasValorUnit!==""&&rA.aulasExtrasValorUnit!==undefined)?_n(rA.aulasExtrasValorUnit):45,aeTotal=aeQ*aeU;
+  var axQ=_n(rA.aulasExpQtd),axU=(rA.aulasExpValorUnit!==""&&rA.aulasExpValorUnit!==undefined)?_n(rA.aulasExpValorUnit):30,axTotal=axQ*axU;
+  var ddQ=_n(rA.descDiasQtd),ddU=(rA.descDiasValorUnit!==""&&rA.descDiasValorUnit!==undefined)?_n(rA.descDiasValorUnit):166.67,ddTotal=ddQ*ddU;
+  var deValor=_n(rA.descExtraValor),deDesc=rA.descExtraDesc||"";
+  var totalAmanda=sFixo+aeTotal+axTotal-ddTotal-deValor;
+
+  return {
+    nicoli:{dataPagamento:rN.dataPagamento||"",holerite:holerite,valeDias:valeDias,valeUnit:valeUnit,valeTotal:valeTotal,total:totalNicoli},
+    amanda:{dataPagamento:rA.dataPagamento||"",sFixo:sFixo,aeQ:aeQ,aeU:aeU,aeTotal:aeTotal,axQ:axQ,axU:axU,axTotal:axTotal,ddQ:ddQ,ddU:ddU,ddTotal:ddTotal,deDesc:deDesc,deValor:deValor,total:totalAmanda},
+    totalGeral:totalNicoli+totalAmanda
+  };
+}
+function folhaHtml(){
+  var pfx=_pfxPonto();
+  var mlbl=["","Janeiro","Fevereiro","Mar\u00e7o","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  var mm=pfx.split("-"),labelMes=mlbl[+mm[1]]+"/"+mm[0];
+  var meses=new Set([pfx]);
+  var hoje=new Date();meses.add(hoje.getFullYear()+"-"+String(hoje.getMonth()+1).padStart(2,"0"));
+  (D.salario||[]).forEach(function(r){if(r.mes)meses.add(String(r.mes).substring(0,7));});
+  (D.ponto||[]).forEach(function(r){if(r.data)meses.add(String(r.data).substring(0,7));});
+  var mlbl3=["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  var optsMes=Array.from(meses).sort().reverse().map(function(m){
+    var p=m.split("-"),val=String(+p[1]).padStart(2,"0")+"/"+p[0];
+    return "<option value='"+val+"'"+(mesAtualPonto===val?" selected":"")+">"+mlbl3[+p[1]]+"/"+p[0]+"</option>";
+  }).join("");
+  var F=_folhaMes(pfx);
+
+  var html="<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px'>";
+  html+="<div class='ct' style='margin-bottom:0'><i class='ti ti-report-money'></i> Folha de Pagamento Consolidada</div>";
+  html+="<div style='display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap'>";
+  html+="<div class='fi' style='margin-bottom:0'><label style='font-size:11px;font-weight:600;color:var(--mt);display:block;margin-bottom:4px'>M\u00caS</label><select onchange='setMesPonto(this.value)' style='font-size:13px;padding:7px 10px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'>"+optsMes+"</select></div>";
+  html+="<button class='btn' style='background:#0b1e35;color:#fff;border:none;display:flex;align-items:center;gap:6px;font-size:13px' onclick='exportPDFFolha()'><i class='ti ti-file-type-pdf'></i> PDF da Folha</button>";
+  html+="</div></div>";
+
+  html+="<div class='card' style='background:linear-gradient(135deg,#f5f7fa 0%,#e8f4f8 100%);border:1px solid #d1e4ed;margin-bottom:16px'>";
+  html+="<p class='ct'><i class='ti ti-calendar'></i> Refer\u00eancia: "+labelMes+"</p>";
+  html+="<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px'>";
+  html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>NICOLI</div><div style='font-size:20px;font-weight:700;color:#1B5F7A'>"+BRL(F.nicoli.total)+"</div></div>";
+  html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>AMANDA</div><div style='font-size:20px;font-weight:700;color:#1B5F7A'>"+BRL(F.amanda.total)+"</div></div>";
+  html+="<div style='text-align:center;padding:10px;border-left:2px solid #d1e4ed'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>TOTAL DA FOLHA</div><div style='font-size:24px;font-weight:800;color:#0b1e35'>"+BRL(F.totalGeral)+"</div></div>";
+  html+="</div></div>";
+
+  html+="<div class='g2'>";
+  html+="<div class='card'><p class='ct'>Nicoli \u2014 detalhamento</p>";
+  if(F.nicoli.dataPagamento)html+="<div class='sr'><span class='sl'>Data de pagamento</span><span class='sv'>"+fd(F.nicoli.dataPagamento)+"</span></div>";
+  html+="<div class='sr'><span class='sl'>Sal\u00e1rio CLT (holerite)</span><span class='sv'>"+BRL(F.nicoli.holerite)+"</span></div>";
+  html+="<div class='sr'><span class='sl'>Vale A ("+F.nicoli.valeDias+" dia(s) x "+BRL(F.nicoli.valeUnit)+")</span><span class='sv'>"+BRL(F.nicoli.valeTotal)+"</span></div>";
+  html+="<div class='sr' style='border-top:1px solid var(--br);margin-top:6px;padding-top:8px'><span class='sl' style='font-weight:700'>Total</span><span class='sv' style='font-weight:700'>"+BRL(F.nicoli.total)+"</span></div>";
+  html+="</div>";
+  html+="<div class='card'><p class='ct'>Amanda \u2014 detalhamento</p>";
+  if(F.amanda.dataPagamento)html+="<div class='sr'><span class='sl'>Data de pagamento</span><span class='sv'>"+fd(F.amanda.dataPagamento)+"</span></div>";
+  html+="<div class='sr'><span class='sl'>Sal\u00e1rio fixo</span><span class='sv'>"+BRL(F.amanda.sFixo)+"</span></div>";
+  html+="<div class='sr'><span class='sl'>Aulas extras fixas ("+F.amanda.aeQ+" x "+BRL(F.amanda.aeU)+")</span><span class='sv'>"+BRL(F.amanda.aeTotal)+"</span></div>";
+  html+="<div class='sr'><span class='sl'>Aulas extras experimentais ("+F.amanda.axQ+" x "+BRL(F.amanda.axU)+")</span><span class='sv'>"+BRL(F.amanda.axTotal)+"</span></div>";
+  html+="<div class='sr'><span class='sl' style='color:#A32D2D'>Desconto de dias ("+F.amanda.ddQ+" x "+BRL(F.amanda.ddU)+")</span><span class='sv' style='color:#c62828'>-"+BRL(F.amanda.ddTotal)+"</span></div>";
+  html+="<div class='sr'><span class='sl' style='color:#A32D2D'>Descontos extras"+(F.amanda.deDesc?" ("+prEsc(F.amanda.deDesc)+")":"")+"</span><span class='sv' style='color:#c62828'>-"+BRL(F.amanda.deValor)+"</span></div>";
+  html+="<div class='sr' style='border-top:1px solid var(--br);margin-top:6px;padding-top:8px'><span class='sl' style='font-weight:700'>Total</span><span class='sv' style='font-weight:700'>"+BRL(F.amanda.total)+"</span></div>";
+  html+="</div>";
+  html+="</div>";
+  return html;
+}
+function exportPDFFolha(){
+  var pfx=_pfxPonto();
+  var mlbl=["","Janeiro","Fevereiro","Mar\u00e7o","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  var mm=pfx.split("-"),labelMes=mlbl[+mm[1]]+"/"+mm[0];
+  var F=_folhaMes(pfx);
+  var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap' rel='stylesheet'>"+pdfCssPremium()+"</head><body><div class='sheet'>";
+  h+=pdfHeaderPremium("Folha de Pagamento","Folha de Pagamento Consolidada","M\u00eas de refer\u00eancia: "+labelMes,"");
+  h+="<div class='pdf-body'>";
+  h+="<div class='pdf-section-title'>Resumo</div>";
+  h+="<table class='pdf-tbl'><tbody>";
+  h+="<tr><td>Nicoli</td><td style='font-weight:700'>"+BRL(F.nicoli.total)+"</td></tr>";
+  h+="<tr><td>Amanda</td><td style='font-weight:700'>"+BRL(F.amanda.total)+"</td></tr>";
+  h+="<tr><td style='font-weight:800'>Total da folha</td><td style='font-weight:800'>"+BRL(F.totalGeral)+"</td></tr>";
+  h+="</tbody></table>";
+  h+="<div class='pdf-section-title'>Nicoli \u2014 detalhamento</div>";
+  h+="<table class='pdf-tbl'><tbody>";
+  if(F.nicoli.dataPagamento)h+="<tr><td>Data de pagamento</td><td style='font-weight:700'>"+fd(F.nicoli.dataPagamento)+"</td></tr>";
+  h+="<tr><td>Sal\u00e1rio CLT (holerite)</td><td style='font-weight:700'>"+BRL(F.nicoli.holerite)+"</td></tr>";
+  h+="<tr><td>Vale A ("+F.nicoli.valeDias+" dia(s) x "+BRL(F.nicoli.valeUnit)+")</td><td style='font-weight:700'>"+BRL(F.nicoli.valeTotal)+"</td></tr>";
+  h+="<tr><td style='font-weight:800'>Total</td><td style='font-weight:800'>"+BRL(F.nicoli.total)+"</td></tr>";
+  h+="</tbody></table>";
+  h+="<div class='pdf-section-title'>Amanda \u2014 detalhamento</div>";
+  h+="<table class='pdf-tbl'><tbody>";
+  if(F.amanda.dataPagamento)h+="<tr><td>Data de pagamento</td><td style='font-weight:700'>"+fd(F.amanda.dataPagamento)+"</td></tr>";
+  h+="<tr><td>Sal\u00e1rio fixo</td><td style='font-weight:700'>"+BRL(F.amanda.sFixo)+"</td></tr>";
+  h+="<tr><td>Aulas extras fixas ("+F.amanda.aeQ+" x "+BRL(F.amanda.aeU)+")</td><td style='font-weight:700'>"+BRL(F.amanda.aeTotal)+"</td></tr>";
+  h+="<tr><td>Aulas extras experimentais ("+F.amanda.axQ+" x "+BRL(F.amanda.axU)+")</td><td style='font-weight:700'>"+BRL(F.amanda.axTotal)+"</td></tr>";
+  h+="<tr><td>Desconto de dias ("+F.amanda.ddQ+" x "+BRL(F.amanda.ddU)+")</td><td style='font-weight:700;color:#c62828'>-"+BRL(F.amanda.ddTotal)+"</td></tr>";
+  h+="<tr><td>Descontos extras"+(F.amanda.deDesc?" ("+prEsc(F.amanda.deDesc)+")":"")+"</td><td style='font-weight:700;color:#c62828'>-"+BRL(F.amanda.deValor)+"</td></tr>";
+  h+="<tr><td style='font-weight:800'>Total</td><td style='font-weight:800'>"+BRL(F.amanda.total)+"</td></tr>";
+  h+="</tbody></table>";
+  h+="</div>";
+  h+=pdfFooterPremium();
+  h+="</div></body></html>";
+  var w=window.open("","_blank","width=900,height=700");if(!w){alert("Bloqueador de pop-up ativado.");return;}
+  w.document.write(h);w.document.close();w.focus();
+  setTimeout(function(){w.print();},1200);
+}
+
+// ===== VIS\u00c3O ANUAL (dashboard, s\u00f3 Gestora) =====
+var anoVisao=null;
+function setAnoVisao(v){anoVisao=+v;refreshContent();}
+function visaoAnualHtml(){
+  if(!anoVisao)anoVisao=new Date().getFullYear();
+  var func=funcPontoSel;
+  var optsFunc=FUNC_PONTO.map(function(f){return "<option value='"+f+"'"+(func===f?" selected":"")+">"+f+"</option>";}).join("");
+  var anoAtual=new Date().getFullYear();
+  var optsAno="";
+  for(var a=anoAtual+1;a>=anoAtual-2;a--){optsAno+="<option value='"+a+"'"+(anoVisao===a?" selected":"")+">"+a+"</option>";}
+  var mlbl=["","Janeiro","Fevereiro","Mar\u00e7o","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+  var html="<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px'>";
+  html+="<div class='ct' style='margin-bottom:0'><i class='ti ti-chart-bar'></i> Vis\u00e3o Anual \u2014 "+func+"</div>";
+  html+="<div style='display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap'>";
+  html+="<div class='fi' style='margin-bottom:0'><label style='font-size:11px;font-weight:600;color:var(--mt);display:block;margin-bottom:4px'>FUNCION\u00c1RIA</label><select onchange='setFuncPonto(this.value)' style='font-size:13px;padding:7px 10px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'>"+optsFunc+"</select></div>";
+  html+="<div class='fi' style='margin-bottom:0'><label style='font-size:11px;font-weight:600;color:var(--mt);display:block;margin-bottom:4px'>ANO</label><select onchange='setAnoVisao(this.value)' style='font-size:13px;padding:7px 10px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'>"+optsAno+"</select></div>";
+  html+="</div></div>";
+
+  var linhas=[],totTrab=0,totContratado=0,totFaltaDias=0,totFaltaMin=0,totAtDias=0,totAtMin=0,totFeriados=0,mesesComDados=0;
+  for(var mNum=1;mNum<=12;mNum++){
+    var pfxM=anoVisao+"-"+String(mNum).padStart(2,"0");
+    var R=_pResumo(func,pfxM);
+    var semDados=R.regs.length===0;
+    if(!semDados){
+      mesesComDados++;
+      totTrab+=R.trab;totContratado+=R.contratado;
+      totFaltaDias+=R.faltaDias;totFaltaMin+=R.faltaMin;
+      totAtDias+=R.atDias;totAtMin+=R.atMin;totFeriados+=R.feriados;
+    }
+    linhas.push({mes:mlbl[mNum],semDados:semDados,R:R});
+  }
+  var saldoAno=totTrab-totContratado+ (totAtDias*480+totAtMin+totFeriados*480);
+
+  // Cards resumo do ano
+  html+="<div class='card' style='background:linear-gradient(135deg,#f5f7fa 0%,#e8f4f8 100%);border:1px solid #d1e4ed;margin-bottom:16px'>";
+  html+="<p class='ct'><i class='ti ti-report-analytics'></i> Resumo do ano de "+anoVisao+" <span style='font-weight:500;font-size:11px;color:var(--mt)'>("+mesesComDados+" m\u00eas(es) com registro de "+12+")</span></p>";
+  html+="<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px'>";
+  html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>HORAS TRABALHADAS</div><div style='font-size:20px;font-weight:700;color:#4CAF50'>"+_pDur(totTrab)+"</div></div>";
+  html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>FALTAS (DIAS)</div><div style='font-size:20px;font-weight:700;color:#D32F2F'>"+totFaltaDias+"</div></div>";
+  html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>FALTAS (HORAS)</div><div style='font-size:20px;font-weight:700;color:#D32F2F'>"+_pDur(totFaltaMin)+"</div></div>";
+  html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>ATESTADOS</div><div style='font-size:20px;font-weight:700;color:#7B5EA7'>"+totAtDias+" dia(s) + "+_pDur(totAtMin)+"</div></div>";
+  html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>FERIADOS</div><div style='font-size:20px;font-weight:700;color:#F57C00'>"+totFeriados+"</div></div>";
+  html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>SALDO (meses c/ registro)</div><div style='font-size:20px;font-weight:700;color:"+(saldoAno>=0?"#4CAF50":"#D32F2F")+"'>"+_pDur(Math.abs(saldoAno))+"</div></div>";
+  html+="</div></div>";
+
+  // Tabela mes a mes
+  html+="<div class='card'><p class='ct'><i class='ti ti-calendar-stats'></i> Detalhamento mensal</p>";
+  html+="<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;font-size:12px'>";
+  html+="<tr style='background:var(--b2)'><th style='padding:8px;text-align:left'>M\u00eas</th><th style='padding:8px'>Trabalhadas</th><th style='padding:8px'>Faltas (dia)</th><th style='padding:8px'>Faltas (h)</th><th style='padding:8px'>Atestados</th><th style='padding:8px'>Feriados</th><th style='padding:8px'>Saldo</th></tr>";
+  linhas.forEach(function(l){
+    if(l.semDados){
+      html+="<tr style='border-bottom:1px solid var(--br)'><td style='padding:8px;font-weight:600'>"+l.mes+"</td><td colspan='6' style='padding:8px;text-align:center;color:var(--mt)'>Sem registros</td></tr>";
+    }else{
+      var R=l.R;
+      var saldoCor=R.saldo>=0?"#2e7d32":"#c62828";
+      html+="<tr style='border-bottom:1px solid var(--br)'>";
+      html+="<td style='padding:8px;font-weight:600'>"+l.mes+"</td>";
+      html+="<td style='padding:8px;text-align:center'>"+_pDur(R.trab)+"</td>";
+      html+="<td style='padding:8px;text-align:center'>"+(R.faltaDias||"\u2014")+"</td>";
+      html+="<td style='padding:8px;text-align:center'>"+(R.faltaMin?_pDur(R.faltaMin):"\u2014")+"</td>";
+      html+="<td style='padding:8px;text-align:center'>"+((R.atDias||R.atMin)?(R.atDias+"d + "+_pDur(R.atMin)):"\u2014")+"</td>";
+      html+="<td style='padding:8px;text-align:center'>"+(R.feriados||"\u2014")+"</td>";
+      html+="<td style='padding:8px;text-align:center;font-weight:700;color:"+saldoCor+"'>"+_pDur(Math.abs(R.saldo))+"</td>";
+      html+="</tr>";
+    }
+  });
+  html+="</table></div></div>";
+  return html;
+}
+
+
 // - antecipadas: dias trabalhados com MENOS de 8h (sa\u00edda mais cedo / jornada incompleta),
 //   cruzando com atestado por horas (com abono) e falta por horas (sem abono) do mesmo dia
 // - semRegistro: dias \u00fateis j\u00e1 passados sem NENHUM registro
