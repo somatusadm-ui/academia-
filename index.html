@@ -971,8 +971,9 @@ if(isCat||user.role==="Secretaria")navAll.push({id:"ponto",icon:"ti-clock",label
   var pfx=mesAtualPfx();
   var caixaMes=D.caixa.filter(function(c){return c.dataVenc&&c.dataVenc.startsWith(pfx);});
   var pendC=caixaMes.filter(function(c){return!c.pago&&c.pago!=="true";}).length;
+  var pendPonto=isCat?(D.ponto||[]).filter(function(r){return r.tipo==="normal"&&_pStatus(r)==="pendente";}).length:0;
   var navH=navAll.map(function(n){
-    var dot=(n.id==="caixa"&&pendC>0)||(n.id==="experimentais"&&pendExp>0);
+    var dot=(n.id==="caixa"&&pendC>0)||(n.id==="experimentais"&&pendExp>0)||(n.id==="ponto"&&pendPonto>0);
     return "<button class='ni"+(tab===n.id?" active":"")+"' onclick=\"goTab('"+n.id+"')\">"
       +"<i class='ti "+n.icon+"'></i>"+n.label+(dot?"<span class='nd'></span>":"")+"</button>";
   }).join("");
@@ -1196,6 +1197,55 @@ async function salvarMensagemDia(){
   dbSave("msgdia",function(){rewriteAba("mensagemdia",h,rows);});
   refreshContent();
 }
+// ===== CARD "BATER PONTO" NO PAINEL (Secret\u00e1ria/Professora) =====
+function baterPontoCardHtml(){
+  if(!user||(user.role!=="Secretaria"&&user.role!=="Professora"))return "";
+  var func=user.role==="Secretaria"?"Nicoli":"Amanda";
+  var hojeISO=fdISO(new Date());
+  var r=(D.ponto||[]).find(function(x){return x.func===func&&x.data===hojeISO&&x.tipo==="normal";});
+  var campoProx=_pProximoCampo(r);
+  var passos=[
+    {c:"entMin",lbl:"Entrada",ic:"ti-login"},
+    {c:"salMin",lbl:"Sa\u00edda almo\u00e7o",ic:"ti-coffee"},
+    {c:"retMin",lbl:"Retorno",ic:"ti-login-2"},
+    {c:"saiMin",lbl:"Sa\u00edda",ic:"ti-logout"}
+  ];
+  var stepsHtml=passos.map(function(p,i){
+    var feito=r&&_pMin(r[p.c])!==null;
+    var atual=p.c===campoProx;
+    var cor=feito?"#4CAF50":(atual?"#1B5F7A":"#c9d3da");
+    var bg=feito?"#E8F5E9":(atual?"#EAF4F8":"#F7F9FA");
+    return "<div style='flex:1;text-align:center;position:relative;z-index:1'>"
+      +(i>0?"<div style='position:absolute;top:22px;right:calc(50% + 22px);width:calc(100% - 44px);height:2px;background:"+(feito||atual?"#BFD9E3":"#e2e6e9")+";z-index:-1'></div>":"")
+      +"<div style='width:44px;height:44px;border-radius:50%;background:"+bg+";border:2px solid "+cor+";display:flex;align-items:center;justify-content:center;margin:0 auto 8px;box-shadow:"+(atual?"0 0 0 5px rgba(27,95,122,.12)":"none")+";transition:all .2s'>"
+      +"<i class='ti "+(feito?"ti-check":p.ic)+"' style='font-size:19px;color:"+cor+"'></i></div>"
+      +"<div style='font-size:11px;font-weight:700;color:var(--tx)'>"+p.lbl+"</div>"
+      +"<div style='font-size:13px;font-weight:800;color:"+(feito?"#2E7D32":"var(--mt)")+";margin-top:2px'>"+(feito?_pHora(r[p.c]):"\u2014")+"</div>"
+      +"</div>";
+  }).join("");
+
+  var botaoHtml;
+  if(campoProx){
+    var lblBtn={entMin:"Bater entrada",salMin:"Bater sa\u00edda para o almo\u00e7o",retMin:"Bater retorno do almo\u00e7o",saiMin:"Bater sa\u00edda"}[campoProx];
+    botaoHtml="<button class='btn bp' style='width:100%;justify-content:center;padding:15px;font-size:15px;font-weight:700;margin-top:20px;border-radius:12px' onclick='baterPonto()'><i class='ti ti-clock-play'></i> "+lblBtn+"</button>";
+  }else{
+    botaoHtml="<div style='margin-top:20px;padding:14px;background:#E8F5E9;border-radius:12px;text-align:center;color:#2E7D32;font-weight:700;font-size:13px'><i class='ti ti-check'></i> Ponto de hoje completo!</div>";
+  }
+
+  var statusNote="";
+  if(r){
+    var pend=_pStatus(r)==="pendente";
+    statusNote="<div style='margin-top:10px;padding:9px 14px;border-radius:8px;font-size:11.5px;font-weight:700;text-align:center;background:"+(pend?"#FFF8E1":"#E8F5E9")+";color:"+(pend?"#8a5a00":"#2E7D32")+"'><i class='ti "+(pend?"ti-hourglass":"ti-shield-check")+"'></i> "+(pend?"Aguardando aprova\u00e7\u00e3o da Catarina":"J\u00e1 aprovado pela Catarina")+"</div>";
+  }
+
+  return "<div class='card painel-card-pro' style='overflow:hidden;margin-bottom:16px;padding:0'>"
+    +"<div class='sidebar-head'><i class='ti ti-clock-play'></i> Bater Ponto <span class='sidebar-badge'>"+fd(hojeISO)+"</span></div>"
+    +"<div style='padding:22px 20px 20px'>"
+    +"<div style='display:flex;gap:2px'>"+stepsHtml+"</div>"
+    +botaoHtml
+    +statusNote
+    +"</div></div>";
+}
 function painelHtml(){
   var pfx=mesAtualPfx();
   var pagMes=D.pag.filter(function(p){return p.data&&p.data.startsWith(pfx);});
@@ -1360,7 +1410,7 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
     // e o alerta de uso de imagem numa coluna lateral compacta.
     var profNomeAmanda=(user.name||"").replace("Professora ","").trim()||"Amanda";
     return heroSimplesHtml
-      +aniversarioBannerHtml()+mensagemDoDiaHtml()
+      +aniversarioBannerHtml()+mensagemDoDiaHtml()+baterPontoCardHtml()
       +"<div class='painel-2col'>"
       +"<div>"+agendaHojeCardHtml(profNomeAmanda)+feedbacksDoMesCardHtml()+"</div>"
       +"<div>"+resumoProfessoraMesCardHtml()+semAutorizacaoImagemCardHtml()+"</div>"
@@ -1372,7 +1422,7 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
     // agenda (com filtro de dia) numa coluna lateral compacta — agenda é somente leitura,
     // sem nenhuma ação disponível.
     return heroSimplesHtml
-      +aniversarioBannerHtml()+mensagemDoDiaHtml()
+      +aniversarioBannerHtml()+mensagemDoDiaHtml()+baterPontoCardHtml()
       +"<div class='painel-2col'>"
       +"<div>"+feedbacksDoMesCardHtml()+avisoFeedbackLancadoCardHtml()+alertaHtml+resumoMensalHtml+"</div>"
       +"<div>"+semAutorizacaoImagemCardHtml()+experimentaisMesCardHtml()+"<div style='margin-top:16px'></div>"+agendaHojeCardHtml(null)+"</div>"
@@ -7022,7 +7072,7 @@ function gerarPDFNaoFecharamMes(){
 // ===== PONTO CLT (exclusivo do login Catarina/Gestora) =====
 var FUNC_PONTO=["Nicoli","Amanda"];
 var mesAtualPonto=null,funcPontoSel="Nicoli",pontoEditId=null,pontoSubTab="ponto";
-var PONTO_H=["id","func","data","tipo","entMin","salMin","retMin","saiMin","qtdMin","obs"];
+var PONTO_H=["id","func","data","tipo","entMin","salMin","retMin","saiMin","qtdMin","obs","status","origem"];
 var SAL_H=["id","func","mes","dataPagamento","holerite","valeDias","valeValorUnit","salarioFixo","aulasExtrasQtd","aulasExtrasValorUnit","aulasExpQtd","aulasExpValorUnit","descDiasQtd","descDiasValorUnit","descExtraDesc","descExtraValor"];
 var _salAlertMsg=null; // {ok:bool,msg:string} — sobrevive ao refreshContent para mostrar o resultado real do salvamento
 function setPontoSubTab(v){pontoSubTab=v;refreshContent();}
@@ -7068,9 +7118,12 @@ function _pResumo(func,pfx){ // pfx "YYYY-MM"
     .slice().sort(function(a,b){return String(a.data)<String(b.data)?-1:1;});
   var pp=pfx.split("-"),diasUteis=_pDiasUteis(+pp[0],+pp[1]);
   var contratado=diasUteis*480; // 8h/dia \u00fatil
-  var trab=0,abonado=0,faltaDias=0,faltaMin=0,atDias=0,atMin=0,feriados=0;
+  var trab=0,abonado=0,faltaDias=0,faltaMin=0,atDias=0,atMin=0,feriados=0,pendentes=0;
   regs.forEach(function(r){
-    if(r.tipo==="normal")trab+=_pTrabalhado(r);
+    if(r.tipo==="normal"){
+      if(_pStatus(r)==="pendente")pendentes++;
+      else trab+=_pTrabalhado(r);
+    }
     else if(r.tipo==="atestado_dia"){abonado+=480;atDias++;}
     else if(r.tipo==="atestado_horas"){var q=_pMin(r.qtdMin)||0;abonado+=q;atMin+=q;}
     else if(r.tipo==="feriado"){abonado+=480;feriados++;}
@@ -7078,11 +7131,11 @@ function _pResumo(func,pfx){ // pfx "YYYY-MM"
     else if(r.tipo==="falta_horas")faltaMin+=_pMin(r.qtdMin)||0;
   });
   var saldo=trab+abonado-contratado;
-  return {regs:regs,diasUteis:diasUteis,contratado:contratado,trab:trab,abonado:abonado,atDias:atDias,atMin:atMin,feriados:feriados,faltaDias:faltaDias,faltaMin:faltaMin,saldo:saldo};
+  return {regs:regs,diasUteis:diasUteis,contratado:contratado,trab:trab,abonado:abonado,atDias:atDias,atMin:atMin,feriados:feriados,faltaDias:faltaDias,faltaMin:faltaMin,pendentes:pendentes,saldo:saldo};
 }
 async function _savePontoNow(){
   var rows=(D.ponto||[]).map(function(p){return PONTO_H.map(function(k){var v=p[k];return (v===undefined||v===null)?"":String(v);});});
-  await rewriteAba("ponto",PONTO_H,rows);
+  return await rewriteAba("ponto",PONTO_H,rows);
 }
 function savePonto(){dbSave("ponto",_savePontoNow);}
 function setFuncPonto(v){funcPontoSel=v;pontoEditId=null;refreshContent();}
@@ -7144,6 +7197,52 @@ function pontoHtml(){
   html+="<button class='btn' style='background:#0b1e35;color:#fff;border:none;display:flex;align-items:center;gap:6px;font-size:13px' onclick='gerarPDFPonto()'><i class='ti ti-file-type-pdf'></i> Relat\u00f3rio do M\u00eas (PDF)</button>";
   html+="</div></div>";
 
+  // ===== BATER PONTO (autoatendimento da pr\u00f3pria funcion\u00e1ria) =====
+  if(!podeEditar){
+    var hojeISO=fdISO(new Date());
+    var regHoje=(D.ponto||[]).find(function(x){return x.func===funcPontoSel&&x.data===hojeISO&&x.tipo==="normal";});
+    var campoProx=_pProximoCampo(regHoje);
+    html+="<div class='card' style='margin-bottom:16px;border-top:3px solid var(--brand)'>";
+    html+="<p class='ct'><i class='ti ti-clock-play'></i> Bater ponto \u2014 hoje ("+fd(hojeISO)+")</p>";
+    html+="<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px'>";
+    ["entMin","salMin","retMin","saiMin"].forEach(function(c){
+      var feito=regHoje&&_pMin(regHoje[c])!==null;
+      html+="<div style='text-align:center;padding:10px;border-radius:8px;background:"+(feito?"#E8F5E9":"var(--b2)")+"'>";
+      html+="<div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:4px'>"+PONTO_CAMPO_LBL[c]+"</div>";
+      html+="<div style='font-size:16px;font-weight:700;color:"+(feito?"#2E7D32":"var(--mt)")+"'>"+(feito?_pHora(regHoje[c]):"\u2014")+"</div>";
+      html+="</div>";
+    });
+    html+="</div>";
+    if(campoProx){
+      html+="<button class='btn bp' style='width:100%;justify-content:center' onclick='baterPonto()'><i class='ti ti-clock-play'></i> Bater "+PONTO_CAMPO_LBL[campoProx].toLowerCase()+" agora</button>";
+    }else{
+      html+="<div class='al2 als' style='justify-content:center'><i class='ti ti-check'></i> Ponto de hoje completo.</div>";
+    }
+    if(regHoje&&_pStatus(regHoje)==="pendente")html+="<p style='font-size:11px;color:var(--am);margin:10px 0 0;text-align:center'><i class='ti ti-hourglass'></i> Aguardando aprova\u00e7\u00e3o da Catarina \u2014 essas horas ainda n\u00e3o entram no saldo do m\u00eas.</p>";
+    else if(regHoje)html+="<p style='font-size:11px;color:#2E7D32;margin:10px 0 0;text-align:center'><i class='ti ti-check'></i> Ponto de hoje aprovado.</p>";
+    html+="</div>";
+  }
+
+  // ===== PENDENTES DE APROVA\u00c7\u00c3O (s\u00f3 Catarina) =====
+  if(podeEditar){
+    var pendReg=(D.ponto||[]).filter(function(r){return r.tipo==="normal"&&_pStatus(r)==="pendente";}).sort(function(a,b){return String(a.data)<String(b.data)?1:-1;});
+    if(pendReg.length>0){
+      html+="<div class='card' style='margin-bottom:16px;border-top:3px solid var(--am)'>";
+      html+="<p class='ct'><i class='ti ti-hourglass'></i> Pendentes de aprova\u00e7\u00e3o ("+pendReg.length+")</p>";
+      html+="<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;font-size:12px'>";
+      html+="<tr style='background:var(--b2)'><th style='padding:8px;text-align:left'>Funcion\u00e1ria</th><th style='padding:8px;text-align:left'>Data</th><th style='padding:8px'>Entrada</th><th style='padding:8px'>Sa\u00edda alm.</th><th style='padding:8px'>Retorno</th><th style='padding:8px'>Sa\u00edda</th><th style='padding:8px'></th></tr>";
+      pendReg.forEach(function(r){
+        html+="<tr style='border-bottom:1px solid var(--br)'>";
+        html+="<td style='padding:8px;font-weight:600'>"+r.func+"</td>";
+        html+="<td style='padding:8px'>"+fd(r.data)+" <span style='color:var(--mt)'>("+_pDiaSemana(r.data)+")</span></td>";
+        html+="<td style='padding:8px;text-align:center'>"+_pHora(r.entMin)+"</td><td style='padding:8px;text-align:center'>"+_pHora(r.salMin)+"</td><td style='padding:8px;text-align:center'>"+_pHora(r.retMin)+"</td><td style='padding:8px;text-align:center'>"+_pHora(r.saiMin)+"</td>";
+        html+="<td style='padding:8px;white-space:nowrap'><button class='btn bp bsm' onclick='aprovarPonto(\""+r.id+"\")' title='Aprovar'><i class='ti ti-check'></i> Aprovar</button> <button class='btn bd bsm' onclick='rejeitarPonto(\""+r.id+"\")' title='Rejeitar'><i class='ti ti-x'></i></button></td>";
+        html+="</tr>";
+      });
+      html+="</table></div></div>";
+    }
+  }
+
   // ===== RESUMO DO M\u00caS =====
   var saldoCor=R.saldo>=0?"#4CAF50":"#D32F2F";
   var saldoLbl=R.saldo>=0?"HORAS EXCEDENTES":"HORAS EM FALTA";
@@ -7161,6 +7260,9 @@ function pontoHtml(){
     if(R.faltaDias>0)descTxt.push(R.faltaDias+" dia(s)");
     if(R.faltaMin>0)descTxt.push(_pDur(R.faltaMin));
     html+="<div style='margin-top:12px;padding:10px 14px;background:#FCEBEB;border-left:4px solid #D32F2F;border-radius:6px;font-size:13px;font-weight:600;color:#A32D2D'><i class='ti ti-alert-triangle'></i> DESCONTAR (falta n\u00e3o justificada): "+descTxt.join(" e ")+"</div>";
+  }
+  if(R.pendentes>0){
+    html+="<div style='margin-top:12px;padding:10px 14px;background:#FFF8E1;border-left:4px solid #F57C00;border-radius:6px;font-size:13px;font-weight:600;color:#8a5a00'><i class='ti ti-hourglass'></i> "+R.pendentes+" registro(s) de ponto aguardando aprova\u00e7\u00e3o \u2014 essas horas ainda n\u00e3o entram no c\u00e1lculo acima.</div>";
   }
   html+="</div>";
 
@@ -7210,12 +7312,13 @@ function pontoHtml(){
     html+="<p class='empty'>Nenhum registro neste m\u00eas.</p>";
   }else{
     html+="<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;font-size:12px'>";
-    html+="<tr style='background:var(--b2)'><th style='padding:8px;text-align:left'>Data</th><th style='padding:8px;text-align:left'>Tipo</th><th style='padding:8px'>Entrada</th><th style='padding:8px'>Sa\u00edda alm.</th><th style='padding:8px'>Retorno</th><th style='padding:8px'>Sa\u00edda</th><th style='padding:8px'>Horas</th><th style='padding:8px;text-align:left'>Obs</th><th style='padding:8px'></th></tr>";
+    html+="<tr style='background:var(--b2)'><th style='padding:8px;text-align:left'>Data</th><th style='padding:8px;text-align:left'>Tipo</th><th style='padding:8px'>Entrada</th><th style='padding:8px'>Sa\u00edda alm.</th><th style='padding:8px'>Retorno</th><th style='padding:8px'>Sa\u00edda</th><th style='padding:8px'>Horas</th><th style='padding:8px'>Status</th><th style='padding:8px;text-align:left'>Obs</th><th style='padding:8px'></th></tr>";
     R.regs.forEach(function(r){
       var horasDia="";
       if(r.tipo==="normal")horasDia=_pDur(_pTrabalhado(r));
       else if(r.tipo==="atestado_dia"||r.tipo==="falta_dia"||r.tipo==="feriado")horasDia="8h (dia)";
       else horasDia=_pDur(_pMin(r.qtdMin)||0);
+      var pendente=r.tipo==="normal"&&_pStatus(r)==="pendente";
       html+="<tr style='border-bottom:1px solid var(--br)'>";
       html+="<td style='padding:8px;white-space:nowrap;font-weight:600'>"+fd(r.data)+" <span style='color:var(--mt);font-weight:400'>("+_pDiaSemana(r.data)+")</span></td>";
       html+="<td style='padding:8px'><span style='font-size:10px;font-weight:700;color:#fff;background:"+(PONTO_TIPO_COR[r.tipo]||"#8b95a3")+";border-radius:12px;padding:2px 8px;white-space:nowrap'>"+(PONTO_TIPO_LBL[r.tipo]||r.tipo)+"</span></td>";
@@ -7225,8 +7328,14 @@ function pontoHtml(){
         html+="<td colspan='4' style='padding:8px;text-align:center;color:var(--mt)'>\u2014</td>";
       }
       html+="<td style='padding:8px;text-align:center;font-weight:700'>"+horasDia+"</td>";
+      html+="<td style='padding:8px;text-align:center'>"+(r.tipo==="normal"?("<span style='font-size:10px;font-weight:700;color:#fff;background:"+(pendente?"#F57C00":"#4CAF50")+";border-radius:12px;padding:2px 8px;white-space:nowrap'>"+(pendente?"Pendente":"Aprovado")+"</span><div style='font-size:9px;color:var(--mt);margin-top:3px;white-space:nowrap'>"+(r.origem==="auto"?"por "+r.func:"lan\u00e7ado por Catarina")+"</div>"):"")+"</td>";
       html+="<td style='padding:8px;color:var(--mt)'>"+(r.obs||"")+"</td>";
-      html+="<td style='padding:8px;white-space:nowrap'>"+(podeEditar?("<button class='btn bsm' onclick='editarPonto(\""+r.id+"\")' title='Editar'><i class='ti ti-pencil'></i></button> <button class='btn bd bsm' onclick='excluirPonto(\""+r.id+"\")' title='Excluir'><i class='ti ti-trash'></i></button>"):"\u2014")+"</td>";
+      var acoes="\u2014";
+      if(podeEditar){
+        acoes="<button class='btn bsm' onclick='editarPonto(\""+r.id+"\")' title='Editar'><i class='ti ti-pencil'></i></button> <button class='btn bd bsm' onclick='excluirPonto(\""+r.id+"\")' title='Excluir'><i class='ti ti-trash'></i></button>";
+        if(pendente)acoes="<button class='btn bp bsm' onclick='aprovarPonto(\""+r.id+"\")' title='Aprovar'><i class='ti ti-check'></i></button> "+acoes;
+      }
+      html+="<td style='padding:8px;white-space:nowrap'>"+acoes+"</td>";
       html+="</tr>";
     });
     html+="</table></div>";
@@ -7251,6 +7360,63 @@ function preencherJornadaPadrao(){
   document.getElementById("pt-ret").value="13:00";
   document.getElementById("pt-sai").value="17:00";
 }
+// ===== BATER PONTO (autoatendimento Secret\u00e1ria/Professora) + APROVA\u00c7\u00c3O (Gestora) =====
+var _pontoBaterMsg=null;
+function _pStatus(r){return r.status==="pendente"?"pendente":"aprovado";} // registros antigos sem status ficam como aprovados (compatibilidade)
+function _pProximoCampo(r){
+  if(!r||_pMin(r.entMin)===null)return "entMin";
+  if(_pMin(r.salMin)===null)return "salMin";
+  if(_pMin(r.retMin)===null)return "retMin";
+  if(_pMin(r.saiMin)===null)return "saiMin";
+  return null;
+}
+var PONTO_CAMPO_LBL={entMin:"Entrada",salMin:"Sa\u00edda para almo\u00e7o",retMin:"Retorno do almo\u00e7o",saiMin:"Sa\u00edda"};
+async function baterPonto(){
+  if(!user||(user.role!=="Secretaria"&&user.role!=="Professora"))return;
+  if(!_umaVez("baterPonto"))return;
+  var func=user.role==="Secretaria"?"Nicoli":"Amanda";
+  var hoje=fdISO(new Date());
+  var agora=new Date();
+  var minAgora=agora.getHours()*60+agora.getMinutes();
+  var r=(D.ponto||[]).find(function(x){return x.func===func&&x.data===hoje&&x.tipo==="normal";});
+  var campo=_pProximoCampo(r);
+  if(!campo){alert("O ponto de hoje j\u00e1 est\u00e1 completo (entrada, sa\u00edda para almo\u00e7o, retorno e sa\u00edda j\u00e1 batidos).");return;}
+  if(!confirm("Bater \""+PONTO_CAMPO_LBL[campo]+"\" agora \u00e0s "+_pHora(minAgora)+"?"))return;
+  if(!r){r={id:_novoId("pt"),func:func,data:hoje,tipo:"normal",entMin:"",salMin:"",retMin:"",saiMin:"",qtdMin:"",obs:"",status:"pendente",origem:"auto"};D.ponto.push(r);}
+  r[campo]=minAgora;
+  r.status="pendente";
+  r.origem="auto";
+  if(_dbt["ponto"]){clearTimeout(_dbt["ponto"]);delete _dbt["ponto"];delete _dbt_fn["ponto"];}
+  var ok=await _savePontoNow();
+  _dbt_last["ponto"]=Date.now();
+  _pontoBaterMsg=ok
+    ?{ok:true,msg:PONTO_CAMPO_LBL[campo]+" registrada \u00e0s "+_pHora(minAgora)+" \u2014 aguardando aprova\u00e7\u00e3o da Catarina."}
+    :{ok:false,msg:"N\u00e3o foi poss\u00edvel registrar o ponto agora. Verifique a internet e tente de novo."};
+  refreshContent();
+}
+async function aprovarPonto(id){
+  if(!user||user.role!=="Gestora")return;
+  var r=(D.ponto||[]).find(function(x){return x.id===id;});
+  if(!r)return;
+  r.status="aprovado";
+  if(_dbt["ponto"]){clearTimeout(_dbt["ponto"]);delete _dbt["ponto"];delete _dbt_fn["ponto"];}
+  var ok=await _savePontoNow();
+  _dbt_last["ponto"]=Date.now();
+  if(!ok)alert("N\u00e3o foi poss\u00edvel salvar a aprova\u00e7\u00e3o. Verifique a internet e tente de novo.");
+  refreshContent();
+}
+async function rejeitarPonto(id){
+  if(!user||user.role!=="Gestora")return;
+  var r=(D.ponto||[]).find(function(x){return x.id===id;});
+  if(!r)return;
+  if(!confirm("Rejeitar o ponto de "+fd(r.data)+" de "+r.func+"? O registro ser\u00e1 apagado e ela pode bater de novo."))return;
+  D.ponto=(D.ponto||[]).filter(function(x){return x.id!==id;});
+  if(_dbt["ponto"]){clearTimeout(_dbt["ponto"]);delete _dbt["ponto"];delete _dbt_fn["ponto"];}
+  var ok=await _savePontoNow();
+  _dbt_last["ponto"]=Date.now();
+  if(!ok)alert("N\u00e3o foi poss\u00edvel salvar a rejei\u00e7\u00e3o. Verifique a internet e tente de novo.");
+  refreshContent();
+}
 function salvarPonto(){
   if(!user||user.role!=="Gestora")return;
   if(!_umaVez("salvarPonto"))return;
@@ -7264,9 +7430,9 @@ function salvarPonto(){
   if(sal!==null&&ret!==null&&ret<=sal){alert2("pt-alert","O retorno do almo\u00e7o precisa ser depois da sa\u00edda para almo\u00e7o.",false);return;}
   var exist=(D.ponto||[]).find(function(r){return r.func===funcPontoSel&&r.data===data&&r.tipo==="normal";});
   if(exist){
-    exist.entMin=ent===null?"":ent;exist.salMin=sal===null?"":sal;exist.retMin=ret===null?"":ret;exist.saiMin=sai===null?"":sai;exist.obs=obs;
+    exist.entMin=ent===null?"":ent;exist.salMin=sal===null?"":sal;exist.retMin=ret===null?"":ret;exist.saiMin=sai===null?"":sai;exist.obs=obs;exist.status="aprovado";exist.origem="manual";
   }else{
-    D.ponto.push({id:_novoId("pt"),func:funcPontoSel,data:data,tipo:"normal",entMin:ent===null?"":ent,salMin:sal===null?"":sal,retMin:ret===null?"":ret,saiMin:sai===null?"":sai,qtdMin:"",obs:obs});
+    D.ponto.push({id:_novoId("pt"),func:funcPontoSel,data:data,tipo:"normal",entMin:ent===null?"":ent,salMin:sal===null?"":sal,retMin:ret===null?"":ret,saiMin:sai===null?"":sai,qtdMin:"",obs:obs,status:"aprovado",origem:"manual"});
   }
   savePonto();
   refreshContent();
@@ -7293,8 +7459,8 @@ function salvarOcorrenciaPonto(){
     }
   }
   var exist=(D.ponto||[]).find(function(r){return r.func===funcPontoSel&&r.data===data&&r.tipo===tipo;});
-  if(exist){exist.qtdMin=qtd;exist.obs=obs;}
-  else D.ponto.push({id:_novoId("pt"),func:funcPontoSel,data:data,tipo:tipo,entMin:"",salMin:"",retMin:"",saiMin:"",qtdMin:qtd,obs:obs});
+  if(exist){exist.qtdMin=qtd;exist.obs=obs;exist.status="aprovado";exist.origem="manual";}
+  else D.ponto.push({id:_novoId("pt"),func:funcPontoSel,data:data,tipo:tipo,entMin:"",salMin:"",retMin:"",saiMin:"",qtdMin:qtd,obs:obs,status:"aprovado",origem:"manual"});
   savePonto();
   refreshContent();
 }
@@ -7372,6 +7538,7 @@ function salarioHtml(podeEditar){
   html+="<div class='ct' style='margin-bottom:0'><i class='ti ti-cash'></i> Sal\u00e1rio \u2014 "+funcPontoSel+"</div>";
   if(podeEditar)html+="<div class='fi' style='margin-bottom:0'><label style='font-size:11px;font-weight:600;color:var(--mt);display:block;margin-bottom:4px'>M\u00caS DE REFER\u00caNCIA</label><select onchange='setMesPonto(this.value)' style='font-size:13px;padding:7px 10px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'>"+optsMes+"</select></div>";
   else html+="<span style='font-weight:500;font-size:12px;color:var(--mt)'>M\u00eas de refer\u00eancia: "+labelMes+"</span>";
+  if(podeEditar)html+="<button class='btn' style='background:#0b1e35;color:#fff;border:none;display:flex;align-items:center;gap:6px;font-size:13px' onclick='gerarContracheque()'><i class='ti ti-file-type-pdf'></i> Contracheque (PDF)</button>";
   html+="</div>";
 
   if(funcPontoSel==="Nicoli"){
@@ -7457,6 +7624,71 @@ function calcSalarioAmanda(){
   document.getElementById("sal-ax-total").value=BRL(axT);
   document.getElementById("sal-dd-total").value=BRL(ddT);
   document.getElementById("sal-total").textContent=BRL(sf+aeT+axT-ddT-de);
+}
+// ===== CONTRACHEQUE INDIVIDUAL (PDF) \u2014 s\u00f3 Gestora gera =====
+function gerarContracheque(){
+  if(!user||user.role!=="Gestora"){alert("Somente a Catarina pode gerar o contracheque.");return;}
+  var pfx=_pfxPonto();
+  var mlbl=["","Janeiro","Fevereiro","Mar\u00e7o","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  var mm=pfx.split("-"),labelMes=mlbl[+mm[1]]+"/"+mm[0];
+  var func=funcPontoSel;
+  var rec=_salRec(func,pfx);
+  var proventos=[],descontos=[],totalProv=0,totalDesc=0;
+
+  if(func==="Nicoli"){
+    var valeDias=_n(rec.valeDias),valeUnit=(rec.valeValorUnit!==""&&rec.valeValorUnit!==undefined)?_n(rec.valeValorUnit):5;
+    var valeTotal=valeDias*valeUnit,holerite=_n(rec.holerite);
+    proventos.push(["Sal\u00e1rio CLT (holerite)",holerite]);
+    if(valeDias>0)proventos.push(["Vale A ("+valeDias+" dia(s) x "+BRL(valeUnit)+")",valeTotal]);
+    totalProv=holerite+valeTotal;
+  }else{
+    var sFixo=(rec.salarioFixo!==""&&rec.salarioFixo!==undefined)?_n(rec.salarioFixo):5000;
+    var aeQ=_n(rec.aulasExtrasQtd),aeU=(rec.aulasExtrasValorUnit!==""&&rec.aulasExtrasValorUnit!==undefined)?_n(rec.aulasExtrasValorUnit):45,aeTotal=aeQ*aeU;
+    var axQ=_n(rec.aulasExpQtd),axU=(rec.aulasExpValorUnit!==""&&rec.aulasExpValorUnit!==undefined)?_n(rec.aulasExpValorUnit):30,axTotal=axQ*axU;
+    var ddQ=_n(rec.descDiasQtd),ddU=(rec.descDiasValorUnit!==""&&rec.descDiasValorUnit!==undefined)?_n(rec.descDiasValorUnit):166.67,ddTotal=ddQ*ddU;
+    var deValor=_n(rec.descExtraValor),deDesc=rec.descExtraDesc||"";
+    proventos.push(["Sal\u00e1rio fixo",sFixo]);
+    if(aeQ>0)proventos.push(["Aulas extras fixas ("+aeQ+" x "+BRL(aeU)+")",aeTotal]);
+    if(axQ>0)proventos.push(["Aulas extras experimentais ("+axQ+" x "+BRL(axU)+")",axTotal]);
+    totalProv=sFixo+aeTotal+axTotal;
+    if(ddQ>0)descontos.push(["Desconto de dias ("+ddQ+" x "+BRL(ddU)+")",ddTotal]);
+    if(deValor>0)descontos.push(["Descontos extras"+(deDesc?" ("+prEsc(deDesc)+")":""),deValor]);
+    totalDesc=ddTotal+deValor;
+  }
+  var liquido=totalProv-totalDesc;
+
+  var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap' rel='stylesheet'>"+pdfCssPremium()+"</head><body><div class='sheet'>";
+  h+=pdfHeaderPremium("Contracheque","Contracheque \u2014 "+func,"M\u00eas de refer\u00eancia: "+labelMes,rec.dataPagamento?("Data de pagamento: "+fd(rec.dataPagamento)):"");
+  h+="<div class='pdf-body'>";
+
+  h+="<div class='pdf-section-title'>Proventos</div>";
+  h+="<table class='pdf-tbl'><tbody>";
+  proventos.forEach(function(p){h+="<tr><td>"+p[0]+"</td><td style='font-weight:700'>"+BRL(p[1])+"</td></tr>";});
+  h+="<tr><td style='font-weight:800'>Total de proventos</td><td style='font-weight:800'>"+BRL(totalProv)+"</td></tr>";
+  h+="</tbody></table>";
+
+  if(descontos.length>0){
+    h+="<div class='pdf-section-title'>Descontos</div>";
+    h+="<table class='pdf-tbl'><tbody>";
+    descontos.forEach(function(d){h+="<tr><td>"+d[0]+"</td><td style='font-weight:700;color:#c62828'>-"+BRL(d[1])+"</td></tr>";});
+    h+="<tr><td style='font-weight:800'>Total de descontos</td><td style='font-weight:800;color:#c62828'>-"+BRL(totalDesc)+"</td></tr>";
+    h+="</tbody></table>";
+  }
+
+  h+="<div style='margin-top:14px;padding:16px;background:linear-gradient(135deg,#f5f7fa 0%,#e8f4f8 100%);border:1px solid #d1e4ed;border-radius:10px;display:flex;justify-content:space-between;align-items:center'>";
+  h+="<span style='font-weight:700;color:#1B5F7A;font-size:15px'>L\u00cdQUIDO A RECEBER</span><span style='font-size:24px;font-weight:800;color:#1B5F7A'>"+BRL(liquido)+"</span></div>";
+
+  h+="<div style='margin-top:50px;display:grid;grid-template-columns:1fr 1fr;gap:40px;text-align:center'>";
+  h+="<div><div style='border-top:1px solid #333;padding-top:6px;font-size:12px'>Ge Dois Academia</div></div>";
+  h+="<div><div style='border-top:1px solid #333;padding-top:6px;font-size:12px'>"+func+"</div></div>";
+  h+="</div>";
+
+  h+="</div>";
+  h+=pdfFooterPremium();
+  h+="</div></body></html>";
+  var w=window.open("","_blank","width=900,height=700");if(!w){alert("Bloqueador de pop-up ativado.");return;}
+  w.document.write(h);w.document.close();w.focus();
+  setTimeout(function(){w.print();},1200);
 }
 function _upsertSalario(func,pfx,patch){
   var r=(D.salario||[]).find(function(x){return x.func===func&&String(x.mes||"").substring(0,7)===pfx;});
@@ -7702,6 +7934,7 @@ function _pDetalhes(func,pfx){
     var rs=porDia[data];
     var norm=rs.find(function(r){return r.tipo==="normal";});
     if(!norm)return;
+    if(_pStatus(norm)==="pendente")return; // aguardando aprova\u00e7\u00e3o \u2014 ainda n\u00e3o entra na an\u00e1lise
     // s\u00f3 avalia jornada completa (entrada E sa\u00edda preenchidas)
     if(_pMin(norm.entMin)===null||_pMin(norm.saiMin)===null)return;
     var trab=_pTrabalhado(norm);
