@@ -1912,7 +1912,8 @@ function matHtml(){
       +"</td></tr>";
   }).join("");
   var cancList=cancelados();
-  return "<div class='card'><p class='ct'><i class='ti ti-plus'></i> Registrar nova matr\u00edcula</p>"
+  return (_prefillMatricula?"<div class='card' style='background:#E8F5E9;border:1px solid #A5D6A7;margin-bottom:16px'><p style='font-size:13px;font-weight:600;color:#2E7D32;margin:0'><i class='ti ti-circle-check'></i> "+_prefillMatricula.nome+" fechou matrícula pela aula experimental! Complete os dados abaixo (plano, valor, horário) e clique em \"Registrar matrícula\".</p></div>":"")
+    +"<div class='card'><p class='ct'><i class='ti ti-plus'></i> Registrar nova matr\u00edcula</p>"
     +"<div id='ma'></div>"
     +"<div class='fr'><div class='fi' style='grid-column:1/-1'><label>Nome completo</label><input type='text' id='mn' placeholder='Nome do aluno'></div></div>"
     +"<div class='fr3'><div class='fi'><label>N\u00ba matr\u00edcula</label><input type='text' id='mnu' placeholder='000054'></div>"
@@ -1924,7 +1925,7 @@ function matHtml(){
     +"<div class='fi'><label>Dia vencimento</label><input type='number' id='mdv' placeholder='10' min='1' max='31'></div></div>"
     +"<div class='fr3'><div class='fi'><label>Dia(s) da semana</label><select id='mds'>"+dOpts+"</select></div>"
     +"<div class='fi'><label>Hor\u00e1rio</label><select id='mh'>"+hOpts+"</select></div>"
-    +"<div class='fi'><label>Professora</label><select id='mpr'><option>Amanda</option><option>Nathalia</option></select></div></div>"
+    +"<div class='fi'><label>Professora</label><select id='mpr'><option>Amanda</option><option>Nathalia</option><option>Lilian</option></select></div></div>"
     +"<div class='fi' style='margin-bottom:10px'><label>Canal de aquisi\u00e7\u00e3o</label>"
     +"<select id='mc2'><option>Instagram</option><option>Instagram Luli</option><option>Tr\u00e1fego Pago</option><option>Indica\u00e7\u00e3o</option><option>PAC Cl\u00ednica 1</option><option>PAC Cl\u00ednica 2</option><option>Outros</option></select></div>"
     +"<div class='fi' style='margin-bottom:10px'><label>Autoriza uso de imagem?</label>"
@@ -2782,6 +2783,7 @@ function alunosExperimentaisHtml(){
       +(a.status==="pendente"?"<button class='btn bd bsm' onclick='abrirModalNaoFechou("+a.ultimoIdx+")'><i class='ti ti-x'></i> Não vai fechar</button>":"")
       +(a.status==="naoConvertido"?"<button class='btn bsm' onclick='reabrirExp("+a.ultimoIdx+")'><i class='ti ti-arrow-back-up'></i> Reabrir</button>":"")
       +"<button class='btn bsm' onclick='novaAulaExpParaAluno(\""+nomeEsc+"\")'><i class='ti ti-plus'></i> Nova aula</button>"
+      +"<button class='btn bsm' style='background:var(--bl);color:var(--brand2);border-color:var(--bl)' onclick='abrirEditarExpAluno(\""+nomeEsc+"\")'><i class='ti ti-edit'></i> Editar</button>"
       +"</td></tr>";
   }
   var pendentes=lista.filter(function(a){return a.status==="pendente";});
@@ -2852,16 +2854,89 @@ function novaAulaExpParaAluno(nome){
   campo.scrollIntoView({behavior:"smooth",block:"center"});
   campo.focus();
 }
+// Abre modal para editar os dados brutos (nome, data, canal, professora, obs) de TODAS as
+// sessões experimentais daquele aluno — útil pra corrigir erro de digitação, data errada, etc.
+var CANAIS_EXP=["Instagram","Instagram Luli","Tráfego Pago","Indicação","PAC Clínica 1","PAC Clínica 2","Outros"];
+var PROFS_EXP=["Amanda","Nathalia","Lilian"];
+function abrirEditarExpAluno(nome){
+  var registros=[];
+  D.exp.forEach(function(e,idx){if(e.nome===nome)registros.push({e:e,idx:idx});});
+  if(registros.length===0){alert("Registro não encontrado.");return;}
+  registros.sort(function(a,b){return (a.e.data||"").localeCompare(b.e.data||"");});
+  var idxList=registros.map(function(o){return o.idx;});
+  var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\"><div class='modal' onclick='event.stopPropagation()' style='max-width:620px;width:94vw;max-height:88vh;overflow-y:auto'>"
+    +"<p class='modal-title'><i class='ti ti-edit' style='color:var(--brand2)'></i> Editar registro"+(registros.length>1?"s":"")+" — "+nome+"</p>"
+    +registros.map(function(o,i){
+      var e=o.e;
+      return "<div class='card c0' style='margin-bottom:10px'>"
+        +(registros.length>1?"<p style='font-size:11px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px'>Sessão "+(i+1)+" de "+registros.length+"</p>":"")
+        +"<div class='fr'><div class='fi' style='grid-column:1/-1'><label>Nome completo</label><input type='text' id='eexN"+o.idx+"' value='"+String(e.nome||"").replace(/'/g,"&#39;")+"'></div></div>"
+        +"<div class='fr3'>"
+        +"<div class='fi'><label>Data</label><input type='date' id='eexD"+o.idx+"' value='"+(e.data||"")+"'></div>"
+        +"<div class='fi'><label>Canal</label><select id='eexC"+o.idx+"'>"+CANAIS_EXP.map(function(c){return "<option"+(e.canal===c?" selected":"")+">"+c+"</option>";}).join("")+"</select></div>"
+        +"<div class='fi'><label>Professora</label><select id='eexP"+o.idx+"'>"+PROFS_EXP.map(function(p){return "<option"+(e.prof===p?" selected":"")+">"+p+"</option>";}).join("")+"</select></div>"
+        +"</div>"
+        +"<div class='fi' style='margin-bottom:0'><label>Observações</label><input type='text' id='eexO"+o.idx+"' value='"+String(e.obs||"").replace(/'/g,"&#39;")+"' placeholder='Interesse, plano...'></div>"
+        +"</div>";
+    }).join("")
+    +"<div style='display:flex;gap:8px;margin-top:6px'>"
+    +"<button class='btn bp' style='flex:1;justify-content:center' onclick='salvarEdicaoExp("+JSON.stringify(idxList)+")'><i class='ti ti-check'></i> Salvar</button>"
+    +"<button class='btn' onclick='closeModal()'>Cancelar</button></div>"
+    +"</div></div>";
+  document.getElementById("mc").innerHTML=html;
+}
+async function salvarEdicaoExp(idxs){
+  idxs.forEach(function(idx){
+    var e=D.exp[idx];if(!e)return;
+    var elN=document.getElementById("eexN"+idx),elD=document.getElementById("eexD"+idx),elC=document.getElementById("eexC"+idx),elP=document.getElementById("eexP"+idx),elO=document.getElementById("eexO"+idx);
+    if(elN&&elN.value.trim())e.nome=elN.value.trim();
+    if(elD&&elD.value)e.data=elD.value;
+    if(elC)e.canal=elC.value;
+    if(elP)e.prof=elP.value;
+    if(elO)e.obs=elO.value;
+  });
+  var h=["nome","data","canal","prof","obs","convertido","naoConvertido","presenca","dataFechamento","motivoNaoFechou"];
+  var rows=D.exp.map(function(e){return h.map(function(k){return String(e[k]||"");});});
+  await rewriteAba("experimentais",h,rows);
+  closeModal();refreshContent();
+}
 // Pede a data real de fechamento (pode ser em outro mês, diferente do mês da aula experimental)
 // e só então marca o aluno como convertido — é essa data que alimenta os painéis.
+// Em seguida, leva direto para a tela de Matrículas já preenchida com nome/data/canal/professora,
+// pra Catarina só completar plano, valor e horário e confirmar.
+var _prefillMatricula=null;
 function converterExpComData(i){
   if(!D.exp[i])return;
-  var def=D.exp[i].dataFechamento||fdISO(new Date());
+  var exp=D.exp[i];
+  var jaEraConvertido=exp.convertido===true||exp.convertido==="true";
+  var def=exp.dataFechamento||fdISO(new Date());
   var r=prompt("Data em que a matrícula foi fechada (AAAA-MM-DD):",def);
   if(r===null)return; // cancelou
   var v=String(r).trim();
   if(!/^\d{4}-\d{2}-\d{2}$/.test(v)){alert("Data inválida. Use o formato AAAA-MM-DD.");return;}
   convExp(i,true,v);
+  if(!jaEraConvertido){
+    // Primeira conversão: leva direto para o formulário de matrícula, já preenchido.
+    _prefillMatricula={nome:exp.nome,data:v,canal:exp.canal||"",prof:exp.prof||""};
+    goTab("matriculas");
+    setTimeout(_aplicarPrefillMatricula,0);
+  }
+}
+function _aplicarPrefillMatricula(){
+  if(!_prefillMatricula)return;
+  var p=_prefillMatricula;
+  var elNome=document.getElementById("mn");if(elNome)elNome.value=p.nome;
+  var elData=document.getElementById("md");if(elData)elData.value=p.data;
+  var elCanal=document.getElementById("mc2");
+  if(elCanal&&p.canal){for(var i=0;i<elCanal.options.length;i++){if(elCanal.options[i].text===p.canal){elCanal.selectedIndex=i;break;}}}
+  var elProf=document.getElementById("mpr");
+  if(elProf&&p.prof){for(var j=0;j<elProf.options.length;j++){if(elProf.options[j].text===p.prof){elProf.selectedIndex=j;break;}}}
+  if(elNome){
+    elNome.scrollIntoView({behavior:"smooth",block:"center"});
+    elNome.style.boxShadow="0 0 0 3px rgba(46,143,179,.35)";
+    setTimeout(function(){elNome.style.boxShadow="";},2200);
+  }
+  _prefillMatricula=null;
 }
 function expHtml(){
   if(!mesAtualExp){var _d=new Date();mesAtualExp=String(_d.getMonth()+1).padStart(2,"0")+"/"+_d.getFullYear();}
