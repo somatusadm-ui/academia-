@@ -2017,13 +2017,13 @@ function avisoFeedbackLancadoCardHtml(){
   var limite=new Date();limite.setDate(limite.getDate()-2);
   var limiteIso=fdISO(limite);
   var lista=(D.pront||[]).filter(function(r){
-    return r.tipo==="feedback"&&r.criadoEm&&r.criadoEm>=limiteIso&&r.criadoEm<=hoje;
-  }).sort(function(a,b){return String(b.criadoEm).localeCompare(String(a.criadoEm));});
+    return r.tipo==="feedback"&&r.data&&r.data>=limiteIso&&r.data<=hoje;
+  }).sort(function(a,b){return String(b.data).localeCompare(String(a.data));});
   if(lista.length===0)return "";
   var rows=lista.map(function(r){
     return "<div class='ci' style='grid-template-columns:1fr 110px'>"
       +"<span><strong>Amanda</strong> lan\u00e7ou feedback de <strong>"+r.aluno.split(" ").slice(0,2).join(" ")+"</strong></span>"
-      +"<span style='text-align:right;color:var(--mt);font-size:11px'>"+fd(r.criadoEm)+"</span>"
+      +"<span style='text-align:right;color:var(--mt);font-size:11px'>"+fd(r.data)+"</span>"
       +"</div>";
   }).join("");
   return "<div class='card' style='margin-bottom:16px;border-left:4px solid var(--brand2);background:var(--bl)'>"
