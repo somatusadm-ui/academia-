@@ -34209,8 +34209,9 @@ if(isCat)navAll.push({id:"logs",icon:"ti-shield-lock",label:"Log de Auditoria"})
   var caixaMes=D.caixa.filter(function(c){return c.dataVenc&&c.dataVenc.startsWith(pfx);});
   var pendC=caixaMes.filter(function(c){return!c.pago&&c.pago!=="true";}).length;
   var pendPonto=isCat?(D.ponto||[]).filter(function(r){return r.tipo==="normal"&&_pStatus(r)==="pendente";}).length:0;
+  var pendEvo=isProf?agendaPendenciasEvolucao((user.name||"").replace("Professora ","").trim()||"Amanda").length:0;
   var navH=navAll.map(function(n){
-    var dot=(n.id==="caixa"&&pendC>0)||(n.id==="experimentais"&&pendExp>0)||(n.id==="ponto"&&pendPonto>0);
+    var dot=(n.id==="caixa"&&pendC>0)||(n.id==="experimentais"&&pendExp>0)||(n.id==="ponto"&&pendPonto>0)||(n.id==="prontuario"&&pendEvo>0);
     return "<button class='ni"+(tab===n.id?" active":"")+"' onclick=\"goTab('"+n.id+"')\">"
       +"<i class='ti "+n.icon+"'></i>"+n.label+(dot?"<span class='nd'></span>":"")+"</button>";
   }).join("");
@@ -34482,6 +34483,7 @@ function baterPontoCardHtml(){
     +"<div style='display:flex;gap:2px'>"+stepsHtml+"</div>"
     +botaoHtml
     +statusNote
+    +(campoProx?"<p style='font-size:10.5px;color:var(--mt);margin:10px 0 0;text-align:center'><i class='ti ti-map-pin'></i> Sua localiza\u00e7\u00e3o \u00e9 registrada junto com cada marca\u00e7\u00e3o.</p>":"")
     +"</div></div>";
 }
 function painelHtml(){
@@ -34649,6 +34651,7 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
     var profNomeAmanda=(user.name||"").replace("Professora ","").trim()||"Amanda";
     return heroSimplesHtml
       +aniversarioBannerHtml()+mensagemDoDiaHtml()+baterPontoCardHtml()
+      +evolucoesPendentesCardHtml(profNomeAmanda)
       +"<div class='painel-2col'>"
       +"<div>"+agendaHojeCardHtml(profNomeAmanda)+feedbacksDoMesCardHtml()+"</div>"
       +"<div>"+resumoProfessoraMesCardHtml()+semAutorizacaoImagemCardHtml()+"</div>"
@@ -39606,6 +39609,70 @@ function prontAlunosLista(){
 }
 var prontAluno="",prontSub="evolucoes",prontEdit=null;
 var prontFicha="motora"; // qual ficha de avaliação está selecionada: "motora" ou "fisio"
+var prontPendData=""; // data de aula pendente de evolução, preenchida ao vir do atalho do painel
+
+// ===== EVOLUÇÕES <-> AGENDA =====
+// A cobrança de evolução só vale a partir do dia em que esse controle passou a existir —
+// aulas anteriores a isso nunca tiveram esse fluxo e não devem aparecer como "pendência".
+var EVOLUCAO_INICIO="2026-07-19";
+// Tira o sufixo " REAGENDADO" (usado internamente pra criar a segunda ocorrência de uma aula
+// remarcada) pra sempre bater com o nome real do aluno matriculado no prontuário.
+function _alunoBase(nome){return String(nome||"").replace(/\s+REAGENDADO$/,"");}
+// Toda aula (fixa ou avulsa, de aluno matriculado ou bolsista) dada por uma professora, a
+// partir de EVOLUCAO_INICIO, gera a obrigação de registrar uma evolução no prontuário — com a
+// mesma data da aula. Só as aulas experimentais ficam de fora: essas não geram essa cobrança.
+function agendaPendenciasEvolucao(profNome){
+  var hoje=fdISO(new Date());
+  var matriculados={};
+  ativos().forEach(function(a){matriculados[a.nome]=true;});
+  var aulas=(D.agenda||[]).filter(function(a){
+    return a.professora===profNome&&a.tipo!=="alerta_contrato"&&a.tipo!=="experimental"
+      &&a.status!=="cancelado"&&a.data&&a.data<=hoje&&a.data>=EVOLUCAO_INICIO
+      &&matriculados[_alunoBase(a.aluno)];
+  });
+  var pend=aulas.filter(function(a){
+    var nomeReal=_alunoBase(a.aluno);
+    return !(D.pront||[]).some(function(p){return p.tipo==="evolucoes"&&p.aluno===nomeReal&&p.data===a.data;});
+  });
+  pend.sort(function(a,b){return a.data.localeCompare(b.data)||(a.hora||"").localeCompare(b.hora||"");});
+  return pend;
+}
+// Card do painel da Professora com as evoluções pendentes.
+function evolucoesPendentesCardHtml(profNome){
+  var pend=agendaPendenciasEvolucao(profNome);
+  if(pend.length===0){
+    return "<div class='card' style='margin-bottom:16px;border-left:4px solid #2E7D32;background:#E8F5E9'>"
+      +"<p class='ct' style='margin-bottom:2px'><i class='ti ti-circle-check'></i> Evoluções em dia</p>"
+      +"<p style='font-size:12px;color:var(--mt);margin:0'>Nenhuma evolução pendente desde "+fd(EVOLUCAO_INICIO)+".</p></div>";
+  }
+  var hoje=fdISO(new Date());
+  var html="<div class='card' style='margin-bottom:16px;border-left:4px solid #D32F2F;background:#FFEBEE'>";
+  html+="<p class='ct' style='margin-bottom:2px'><i class='ti ti-alert-triangle'></i> Evoluções pendentes<span class='badge br2' style='margin-left:8px'>"+pend.length+"</span></p>";
+  html+="<p style='font-size:11px;color:var(--mt);margin:0 0 10px'>Aulas já dadas sem evolução registrada — inclusive faltas, que também precisam ser preenchidas.</p>";
+  html+="<div>"+pend.map(function(a){
+    var atrasado=a.data<hoje;
+    var faltou=a.presenca==="falta";
+    var nomeReal=_alunoBase(a.aluno);
+    var tagData=a.data===hoje?"<span class='badge bam' style='margin-left:6px'>Hoje</span>":(atrasado?"<span class='badge br2' style='margin-left:6px'>Atrasada</span>":"");
+    var tagFalta=faltou?"<span class='badge' style='margin-left:6px;background:#9E9E9E;color:#fff'>Faltou</span>":"";
+    return "<div class='timeline-item tl-red' style='cursor:pointer' onclick='irParaEvolucaoPendente(\""+nomeReal.replace(/"/g,"&quot;")+"\",\""+a.data+"\")'>"
+      +"<p style='font-weight:700;font-size:12px;margin:0;display:flex;align-items:center;flex-wrap:wrap'>"+fd(a.data)+" &middot; "+nomeReal+tagData+tagFalta+"</p>"
+      +"<p style='font-size:11px;color:var(--brand2);margin:2px 0 0'><i class='ti ti-pencil'></i> Toque para preencher a evolução</p>"
+      +"</div>";
+  }).join("")+"</div></div>";
+  return html;
+}
+// Atalho: sai do painel direto pra Evoluções do aluno, já com a data da aula pendente.
+function irParaEvolucaoPendente(aluno,data){
+  goTab("prontuario");
+  prontAluno=aluno;
+  prontSub="evolucoes";
+  prontEdit=null;
+  prontFicha="motora";
+  prontPendData=data;
+  refreshContent();
+  setTimeout(function(){window.scrollTo(0,0);},50);
+}
 var rpAluno="",rpModo="completo",rpIni="",rpFim="",rpTipo="evolucao",rpAvModo="uma",rpAvData="";
 
 // === BUSCA RÁPIDA DE ALUNO (somente login Catarina/Gestora) ===
@@ -39958,13 +40025,13 @@ function prontuarioHtml(){
   if(!D.pront)D.pront=[];
   var html="<div class='content'><div class='ct'><i class='ti ti-notes'></i> Prontuário</div>";
   html+="<div class='card' style='margin-bottom:16px'><div class='fi'><label>Aluno (ativos e cancelados)</label>";
-  html+="<select id='pr-aluno' onchange='prontAluno=this.value;prontEdit=null;prontFicha=\"motora\";refreshContent()' style='font-size:13px;padding:9px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value=''>Selecione...</option>";
+  html+="<select id='pr-aluno' onchange='prontAluno=this.value;prontEdit=null;prontFicha=\"motora\";prontPendData=\"\";refreshContent()' style='font-size:13px;padding:9px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value=''>Selecione...</option>";
   prontAlunosLista().forEach(function(a){html+="<option value=\""+a.nome.replace(/"/g,"&quot;")+"\""+(prontAluno===a.nome?" selected":"")+">"+a.nome+(a.st==="Cancelado"?" (Cancelado)":"")+"</option>";});
   html+="</select></div></div>";
   if(!prontAluno)return html+"<div class='card'><p class='empty'><i class='ti ti-user-search'></i> Selecione um aluno para abrir o prontuário.</p></div></div>";
   var subs=[["evolucoes","Evoluções"],["avaliacoes","Avaliações"],["plano","Plano"],["feedback","Feedback"]];
   html+="<div style='display:flex;gap:4px;margin-bottom:14px;flex-wrap:wrap'>";
-  subs.forEach(function(s){html+="<button class='tab"+(prontSub===s[0]?" active":"")+"' onclick='prontSub=\""+s[0]+"\";prontEdit=null;prontFicha=\"motora\";refreshContent()'>"+s[1]+"</button>";});
+  subs.forEach(function(s){html+="<button class='tab"+(prontSub===s[0]?" active":"")+"' onclick='prontSub=\""+s[0]+"\";prontEdit=null;prontFicha=\"motora\";prontPendData=\"\";refreshContent()'>"+s[1]+"</button>";});
   html+="</div>";
   html+=perfilDadosBasicosResumo(prontAluno);
   var d=prontEdit?prDados(prontEdit):{};
@@ -39972,8 +40039,23 @@ function prontuarioHtml(){
   var recs=(D.pront||[]).filter(function(r){return r.aluno===prontAluno&&r.tipo===prontSub;}).sort(function(a,b){return String(b.data).localeCompare(String(a.data));});
 
   if(prontSub==="evolucoes"){
+    if(!ed&&prontPendData){
+      html+="<div class='card' style='margin-bottom:12px;border-left:4px solid #D32F2F;background:#FFEBEE'>"
+        +"<p style='font-size:12px;font-weight:700;color:#D32F2F;margin:0'><i class='ti ti-alert-triangle'></i> Aula do dia "+fd(prontPendData)+" ainda sem evolução registrada.</p>"
+        +"<p style='font-size:11px;color:var(--mt);margin:4px 0 0'>Preencha abaixo — a data já foi selecionada pra você.</p></div>";
+    }
+    if(!ed&&user.role==="Professora"){
+      var profNomePend=(user.name||"").replace("Professora ","").trim()||"Amanda";
+      var pendAluno=agendaPendenciasEvolucao(profNomePend).filter(function(a){return _alunoBase(a.aluno)===prontAluno;});
+      if(pendAluno.length>0){
+        html+="<div class='card' style='margin-bottom:12px;border-left:4px solid #FF6F00;background:#FFF3E0'>"
+          +"<p style='font-size:12px;font-weight:700;color:#FF6F00;margin:0 0 6px'><i class='ti ti-calendar-exclamation'></i> "+pendAluno.length+" aula(s) de "+prontAluno+" sem evolução</p>"
+          +pendAluno.map(function(a){return "<span class='badge br2' style='margin:2px 4px 2px 0;cursor:pointer' onclick='prontPendData=\""+a.data+"\";refreshContent()'>"+fd(a.data)+(a.presenca==="falta"?" (faltou)":"")+"</span>";}).join("")
+          +"</div>";
+      }
+    }
     html+="<div class='card' style='margin-bottom:16px'><p class='ct'><i class='ti ti-"+(ed?"edit":"plus")+"'></i> "+(ed?"Editar":"Nova")+" Evolução</p>";
-    html+="<div class='fr3' style='margin-bottom:10px'><div class='fi'><label>Data</label>"+prDate("pr-data",ed?prontEdit.data:"")+"</div></div>";
+    html+="<div class='fr3' style='margin-bottom:10px'><div class='fi'><label>Data</label>"+prDate("pr-data",ed?prontEdit.data:prontPendData)+"</div></div>";
     html+="<div class='fi' style='margin-bottom:10px'><label>Objetivos</label>"+prTxa("pr-obj",d.objetivos)+"</div>";
     html+="<div class='fi' style='margin-bottom:10px'><label>Exercícios</label>"+prTxa("pr-exe",d.exercicios)+"</div>";
     html+="<div class='fi' style='margin-bottom:10px'><label>Evolução observada</label>"+prTxa("pr-evo",d.evolucao)+"</div>";
@@ -40261,7 +40343,7 @@ async function salvarPront(){
     D.pront.push({id:_novoId("pr"),aluno:prontAluno,tipo:prontSub,data:data,dados:JSON.stringify(dados),criadoEm:fdISO(new Date())});
   }
   var ok=await _saveProntNow();
-  if(ok){prontEdit=null;prontFicha="motora";refreshContent();}
+  if(ok){prontEdit=null;prontFicha="motora";prontPendData="";refreshContent();}
   else{alert("Erro ao salvar no Google Sheets. Verifique se a aba \"prontuario\" existe na planilha.");}
 }
 function editarPront(id){
@@ -40647,7 +40729,7 @@ function gerarPDFNaoFecharamMes(){
 // ===== PONTO CLT (exclusivo do login Catarina/Gestora) =====
 var FUNC_PONTO=["Nicoli","Amanda"];
 var mesAtualPonto=null,funcPontoSel="Nicoli",pontoEditId=null,pontoSubTab="ponto";
-var PONTO_H=["id","func","data","tipo","entMin","salMin","retMin","saiMin","qtdMin","obs","status","origem"];
+var PONTO_H=["id","func","data","tipo","entMin","salMin","retMin","saiMin","qtdMin","obs","status","origem","geo"];
 var SAL_H=["id","func","mes","dataPagamento","holerite","valeDias","valeValorUnit","salarioFixo","aulasExtrasQtd","aulasExtrasValorUnit","aulasExpQtd","aulasExpValorUnit","descDiasQtd","descDiasValorUnit","descExtraDesc","descExtraValor"];
 var _salAlertMsg=null; // {ok:bool,msg:string} — sobrevive ao refreshContent para mostrar o resultado real do salvamento
 function setPontoSubTab(v){pontoSubTab=v;refreshContent();}
@@ -40801,6 +40883,7 @@ function pontoHtml(){
     html+="</div>";
     if(campoProx){
       html+="<button class='btn bp' style='width:100%;justify-content:center' onclick='baterPonto()'><i class='ti ti-clock-play'></i> Bater "+PONTO_CAMPO_LBL[campoProx].toLowerCase()+" agora</button>";
+      html+="<p style='font-size:10.5px;color:var(--mt);margin:8px 0 0;text-align:center'><i class='ti ti-map-pin'></i> Sua localiza\u00e7\u00e3o \u00e9 registrada junto com cada marca\u00e7\u00e3o.</p>";
     }else{
       html+="<div class='al2 als' style='justify-content:center'><i class='ti ti-check'></i> Ponto de hoje completo.</div>";
     }
@@ -40834,7 +40917,7 @@ function pontoHtml(){
         html+="<tr style='border-bottom:1px solid var(--br)'>";
         html+="<td style='padding:8px;font-weight:600'>"+r.func+"</td>";
         html+="<td style='padding:8px'>"+fd(r.data)+" <span style='color:var(--mt)'>("+_pDiaSemana(r.data)+")</span></td>";
-        html+="<td style='padding:8px;text-align:center'>"+_pHora(r.entMin)+"</td><td style='padding:8px;text-align:center'>"+_pHora(r.salMin)+"</td><td style='padding:8px;text-align:center'>"+_pHora(r.retMin)+"</td><td style='padding:8px;text-align:center'>"+_pHora(r.saiMin)+"</td>";
+        html+="<td style='padding:8px;text-align:center'>"+_pHora(r.entMin)+_pGeoBtn(r,"entMin")+"</td><td style='padding:8px;text-align:center'>"+_pHora(r.salMin)+_pGeoBtn(r,"salMin")+"</td><td style='padding:8px;text-align:center'>"+_pHora(r.retMin)+_pGeoBtn(r,"retMin")+"</td><td style='padding:8px;text-align:center'>"+_pHora(r.saiMin)+_pGeoBtn(r,"saiMin")+"</td>";
         html+="<td style='padding:8px;white-space:nowrap'><button class='btn bp bsm' onclick='aprovarPonto(\""+r.id+"\")' title='Aprovar'><i class='ti ti-check'></i> Aprovar</button> <button class='btn bd bsm' onclick='rejeitarPonto(\""+r.id+"\")' title='Rejeitar'><i class='ti ti-x'></i></button></td>";
         html+="</tr>";
       });
@@ -40923,7 +41006,7 @@ function pontoHtml(){
       html+="<td style='padding:8px;white-space:nowrap;font-weight:600'>"+fd(r.data)+" <span style='color:var(--mt);font-weight:400'>("+_pDiaSemana(r.data)+")</span></td>";
       html+="<td style='padding:8px'><span style='font-size:10px;font-weight:700;color:#fff;background:"+(PONTO_TIPO_COR[r.tipo]||"#8b95a3")+";border-radius:12px;padding:2px 8px;white-space:nowrap'>"+(PONTO_TIPO_LBL[r.tipo]||r.tipo)+"</span></td>";
       if(r.tipo==="normal"){
-        html+="<td style='padding:8px;text-align:center'>"+_pHora(r.entMin)+"</td><td style='padding:8px;text-align:center'>"+_pHora(r.salMin)+"</td><td style='padding:8px;text-align:center'>"+_pHora(r.retMin)+"</td><td style='padding:8px;text-align:center'>"+_pHora(r.saiMin)+"</td>";
+        html+="<td style='padding:8px;text-align:center'>"+_pHora(r.entMin)+_pGeoBtn(r,"entMin")+"</td><td style='padding:8px;text-align:center'>"+_pHora(r.salMin)+_pGeoBtn(r,"salMin")+"</td><td style='padding:8px;text-align:center'>"+_pHora(r.retMin)+_pGeoBtn(r,"retMin")+"</td><td style='padding:8px;text-align:center'>"+_pHora(r.saiMin)+_pGeoBtn(r,"saiMin")+"</td>";
       }else{
         html+="<td colspan='4' style='padding:8px;text-align:center;color:var(--mt)'>\u2014</td>";
       }
@@ -40973,6 +41056,32 @@ function _pProximoCampo(r){
   return null;
 }
 var PONTO_CAMPO_LBL={entMin:"Entrada",salMin:"Sa\u00edda para almo\u00e7o",retMin:"Retorno do almo\u00e7o",saiMin:"Sa\u00edda"};
+// ===== LOCALIZAÇÃO NO PONTO =====
+// Captura a localização do navegador no momento em que a funcionária bate o ponto.
+// Guardamos um JSON por registro (coluna "geo"), com uma entrada por campo (entMin/salMin/retMin/saiMin),
+// pra saber de onde partiu cada marcação do dia — não só a entrada.
+function _pGeoObj(r){try{return r&&r.geo?(typeof r.geo==="string"?JSON.parse(r.geo):r.geo):{};}catch(e){return {};}}
+function _getGeoPonto(){
+  return new Promise(function(resolve){
+    if(!navigator.geolocation){resolve({status:"indisponivel"});return;}
+    navigator.geolocation.getCurrentPosition(function(pos){
+      resolve({status:"ok",lat:+pos.coords.latitude.toFixed(6),lng:+pos.coords.longitude.toFixed(6),precisao:Math.round(pos.coords.accuracy||0)});
+    },function(err){
+      resolve({status:(err&&err.code===1)?"negado":"erro"});
+    },{enableHighAccuracy:true,timeout:8000,maximumAge:0});
+  });
+}
+// Ícone clicável (abre no Google Maps) pra exibir ao lado de cada horário nas tabelas de ponto.
+function _pGeoBtn(r,campo){
+  var g=_pGeoObj(r)[campo];
+  if(!g)return "";
+  if(g.status==="ok"){
+    var url="https://www.google.com/maps?q="+g.lat+","+g.lng;
+    return " <a href='"+url+"' target='_blank' rel='noopener' title='Local do registro \u2014 precis\u00e3o ~"+(g.precisao||"?")+"m' style='color:var(--brand2);text-decoration:none'><i class='ti ti-map-pin'></i></a>";
+  }
+  if(g.status==="negado")return " <i class='ti ti-map-pin-off' style='color:#D32F2F' title='Localiza\u00e7\u00e3o negada pela funcion\u00e1ria neste registro'></i>";
+  return " <i class='ti ti-map-pin-off' style='color:var(--mt)' title='Localiza\u00e7\u00e3o indispon\u00edvel neste registro'></i>";
+}
 async function baterPonto(){
   if(!user||(user.role!=="Secretaria"&&user.role!=="Professora"))return;
   if(!_umaVez("baterPonto"))return;
@@ -40983,11 +41092,13 @@ async function baterPonto(){
   var r=(D.ponto||[]).find(function(x){return x.func===func&&x.data===hoje&&x.tipo==="normal";});
   var campo=_pProximoCampo(r);
   if(!campo){alert("O ponto de hoje j\u00e1 est\u00e1 completo (entrada, sa\u00edda para almo\u00e7o, retorno e sa\u00edda j\u00e1 batidos).");return;}
-  if(!confirm("Bater \""+PONTO_CAMPO_LBL[campo]+"\" agora \u00e0s "+_pHora(minAgora)+"?"))return;
-  if(!r){r={id:_novoId("pt"),func:func,data:hoje,tipo:"normal",entMin:"",salMin:"",retMin:"",saiMin:"",qtdMin:"",obs:"",status:"pendente",origem:"auto"};D.ponto.push(r);}
+  if(!confirm("Bater \""+PONTO_CAMPO_LBL[campo]+"\" agora \u00e0s "+_pHora(minAgora)+"?\n\nSua localiza\u00e7\u00e3o neste momento ser\u00e1 registrada junto com o hor\u00e1rio."))return;
+  var geo=await _getGeoPonto();
+  if(!r){r={id:_novoId("pt"),func:func,data:hoje,tipo:"normal",entMin:"",salMin:"",retMin:"",saiMin:"",qtdMin:"",obs:"",status:"pendente",origem:"auto",geo:"{}"};D.ponto.push(r);}
   r[campo]=minAgora;
   r.status="pendente";
   r.origem="auto";
+  var geoObj=_pGeoObj(r);geoObj[campo]=geo;r.geo=JSON.stringify(geoObj);
   if(_dbt["ponto"]){clearTimeout(_dbt["ponto"]);delete _dbt["ponto"];delete _dbt_fn["ponto"];}
   var ok=await _savePontoNow();
   _dbt_last["ponto"]=Date.now();
