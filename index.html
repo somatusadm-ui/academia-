@@ -34730,67 +34730,6 @@ function isPago(c){return c.pago===true||String(c.pago).toLowerCase()==="true";}
 function setMesCaixa(m){mesAtualCaixa=m;}
 function setMesExp(m){mesAtualExp=m;}
 function setMesRel(m){mesAtualRel=m;refreshContent();}
-// Projeta os recebimentos esperados dos próximos N dias a partir de hoje, combinando:
-// 1) lançamentos já existentes no caixa (não pagos), e
-// 2) meses futuros ainda não gerados no caixa, previstos a partir das matrículas ativas.
-function _projecaoFluxoCaixa(dias){
-  var hoje=new Date();hoje.setHours(0,0,0,0);
-  var limite=new Date(hoje.getTime()+dias*24*60*60*1000);
-  var itens=[],vistoChave={};
-  (D.caixa||[]).forEach(function(c){
-    if(!c.dataVenc||isPago(c)||eCanc(c.nome))return;
-    if(c.oculto===true||String(c.oculto)==="true")return;
-    var dv=pdl(c.dataVenc);
-    if(dv<hoje||dv>limite)return;
-    var chave=c.nome+"|"+c.dataVenc.substring(0,7);
-    if(vistoChave[chave])return;
-    vistoChave[chave]=true;
-    itens.push({nome:c.nome,valor:+c.valor||0,dataVenc:c.dataVenc,origem:"lancado"});
-  });
-  var cursor=new Date(hoje),mesesCobertos={};
-  while(cursor<=limite){
-    var chaveM=cursor.getFullYear()+"-"+String(cursor.getMonth()+1).padStart(2,"0");
-    if(!mesesCobertos[chaveM]){
-      mesesCobertos[chaveM]=true;
-      (D.mat||[]).forEach(function(m){
-        if(eCanc(m.nome))return;
-        if(m.bolsista===true||m.bolsista==="true")return; // bolsista não gera cobrança
-        var dv=dataVencMes(m.diaVenc,cursor.getFullYear(),cursor.getMonth()+1);
-        var chave=m.nome+"|"+dv.substring(0,7);
-        if(vistoChave[chave])return; // já contabilizado via lançamento real
-        var dvDate=pdl(dv);
-        if(dvDate<hoje||dvDate>limite)return;
-        vistoChave[chave]=true;
-        itens.push({nome:m.nome,valor:+m.valor||0,dataVenc:dv,origem:"previsto"});
-      });
-    }
-    cursor.setMonth(cursor.getMonth()+1);
-  }
-  itens.sort(function(a,b){return a.dataVenc<b.dataVenc?-1:(a.dataVenc>b.dataVenc?1:0);});
-  var total=itens.reduce(function(a,i){return a+i.valor;},0);
-  return {itens:itens,total:total};
-}
-function fluxoCaixaProjecaoHtml(){
-  var p30=_projecaoFluxoCaixa(30),p60=_projecaoFluxoCaixa(60);
-  var hojeD=new Date();hojeD.setHours(0,0,0,0);
-  var rows=p60.itens.map(function(i){
-    var dias=Math.round((pdl(i.dataVenc)-hojeD)/86400000);
-    return "<div class='ci' style='grid-template-columns:120px 1fr 110px 100px'>"
-      +"<span>"+fd(i.dataVenc)+" <span style='font-size:10px;color:var(--mt)'>(D+"+dias+")</span></span>"
-      +"<span>"+i.nome.split(" ").slice(0,2).join(" ")+"</span>"
-      +"<span style='font-weight:700;color:var(--gn)'>"+BRL(i.valor)+"</span>"
-      +"<span>"+(i.origem==="previsto"?"<span class='badge bam'>Previsto</span>":"<span class='badge btl'>Lançado</span>")+"</span>"
-      +"</div>";
-  }).join("");
-  return "<div class='card c0' style='margin-bottom:16px'><p class='ct'><i class='ti ti-calendar-stats'></i> Projeção de Fluxo de Caixa</p>"
-    +"<p style='font-size:11px;color:var(--mt);margin:-6px 0 14px'>Soma dos recebimentos esperados a partir de hoje, combinando lançamentos já cadastrados (não pagos) e mensalidades previstas das matrículas ativas ainda não lançadas.</p>"
-    +"<div class='g2' style='margin-bottom:14px'>"
-    +"<div class='kpi'><div class='ka' style='background:var(--brand2)'></div><p class='kl'>Próximos 30 dias</p><p class='kv' style='color:var(--brand2)'>"+BRL(p30.total)+"</p><p class='ks'>"+p30.itens.length+" recebimentos previstos</p></div>"
-    +"<div class='kpi'><div class='ka' style='background:var(--pu)'></div><p class='kl'>Próximos 60 dias</p><p class='kv' style='color:var(--pu)'>"+BRL(p60.total)+"</p><p class='ks'>"+p60.itens.length+" recebimentos previstos</p></div>"
-    +"</div>"
-    +(rows?"<div class='ox'>"+rows+"</div>":"<p class='empty'>Nenhum recebimento previsto no período.</p>")
-    +"</div>";
-}
 function caixaHtml(){
   try{
   if(!mesAtualCaixa){var _d=new Date();mesAtualCaixa=String(_d.getMonth()+1).padStart(2,"0")+"/"+_d.getFullYear();}
@@ -34861,11 +34800,16 @@ function caixaHtml(){
       +"<span style='font-size:11px;color:var(--mt)'>"+(c.formaPag||"&#8212;")+"</span>"
       +"</div>";
   }).join("");
-  // Seletor sempre inclui proximo mes
+  // Seletor sempre inclui o mês atual e os próximos 6 meses (para projeção por contratos ativos)
   var meses_cx=new Set();
   D.caixa.forEach(function(c){if(c.dataVenc)meses_cx.add(c.dataVenc.substring(0,7));});
-  var _dn=new Date(),_nm=_dn.getMonth()+2,_na=_dn.getFullYear();if(_nm>12){_nm=1;_na++;}
-  meses_cx.add(_na+"-"+String(_nm).padStart(2,"0"));
+  var _dn=new Date(),_nm=_dn.getMonth()+1,_na=_dn.getFullYear();
+  meses_cx.add(_na+"-"+String(_nm).padStart(2,"0")); // mês atual
+  for(var _i=1;_i<=6;_i++){
+    var _fm=_nm+_i,_fa=_na;
+    while(_fm>12){_fm-=12;_fa++;}
+    meses_cx.add(_fa+"-"+String(_fm).padStart(2,"0"));
+  }
   var opts_cx=Array.from(meses_cx).sort().reverse().map(function(m){
     var mm=m.split("-"),lbl=["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][+mm[1]]+"/"+mm[0];
     var val=String(+mm[1]).padStart(2,"0")+"/"+mm[0];
@@ -34882,8 +34826,7 @@ function caixaHtml(){
       +"<span style='font-size:11px;color:var(--mt)'>Prev.</span>"
       +"</div>";
   }).join("");
-  return fluxoCaixaProjecaoHtml()
-    +"<div style='margin-bottom:16px'><div class='fi' style='max-width:150px'><label>M\u00eas</label>"
+  return "<div style='margin-bottom:16px'><div class='fi' style='max-width:150px'><label>M\u00eas</label>"
     +"<select onchange='setMesCaixa(this.value);refreshContent()'>"+opts_cx+"</select></div></div>"
     +(_isFuturo&&caixaMes.length===0
       ?"<div class='g3'>"
@@ -40708,8 +40651,8 @@ var PONTO_H=["id","func","data","tipo","entMin","salMin","retMin","saiMin","qtdM
 var SAL_H=["id","func","mes","dataPagamento","holerite","valeDias","valeValorUnit","salarioFixo","aulasExtrasQtd","aulasExtrasValorUnit","aulasExpQtd","aulasExpValorUnit","descDiasQtd","descDiasValorUnit","descExtraDesc","descExtraValor"];
 var _salAlertMsg=null; // {ok:bool,msg:string} — sobrevive ao refreshContent para mostrar o resultado real do salvamento
 function setPontoSubTab(v){pontoSubTab=v;refreshContent();}
-var PONTO_TIPO_LBL={normal:"Registro de ponto",atestado_dia:"Atestado (dia inteiro)",atestado_horas:"Atestado (horas)",falta_dia:"Falta n\u00e3o justificada (dia)",falta_horas:"Falta n\u00e3o justificada (horas)",feriado:"Feriado"};
-var PONTO_TIPO_COR={normal:"#1B5F7A",atestado_dia:"#7B5EA7",atestado_horas:"#7B5EA7",falta_dia:"#D32F2F",falta_horas:"#D32F2F",feriado:"#F57C00"};
+var PONTO_TIPO_LBL={normal:"Registro de ponto",atestado_dia:"Atestado (dia inteiro)",atestado_horas:"Atestado (horas)",falta_abonada_dia:"Falta abonada (dia inteiro)",falta_abonada_horas:"Falta abonada (horas)",falta_dia:"Falta n\u00e3o justificada (dia)",falta_horas:"Falta n\u00e3o justificada (horas)",feriado:"Feriado"};
+var PONTO_TIPO_COR={normal:"#1B5F7A",atestado_dia:"#7B5EA7",atestado_horas:"#7B5EA7",falta_abonada_dia:"#2E8B7A",falta_abonada_horas:"#2E8B7A",falta_dia:"#D32F2F",falta_horas:"#D32F2F",feriado:"#F57C00"};
 // Horas s\u00e3o guardadas SEMPRE como minutos (n\u00famero) \u2014 evita o bug do Sheets
 // converter "08:00" em serial de data (mesmo problema j\u00e1 corrigido na Agenda).
 function _pMin(v){
@@ -40732,6 +40675,11 @@ function _pDiasUteis(ano,mes){ // mes 1-12; segunda a sexta
   for(var d=1;d<=ult;d++){var dw=new Date(ano,mes-1,d).getDay();if(dw>=1&&dw<=5)n++;}
   return n;
 }
+function _pDiasUteisLista(ano,mes){ // mes 1-12; retorna array de datas ISO (seg-sex) do mês
+  var arr=[],ult=new Date(ano,mes,0).getDate();
+  for(var d=1;d<=ult;d++){var dt=new Date(ano,mes-1,d);var dw=dt.getDay();if(dw>=1&&dw<=5)arr.push(fdISO(dt));}
+  return arr;
+}
 function _pDiaSemana(iso){
   var nomes=["Dom","Seg","Ter","Qua","Qui","Sex","S\u00e1b"];
   return nomes[new Date(iso+"T12:00").getDay()];
@@ -40750,7 +40698,7 @@ function _pResumo(func,pfx){ // pfx "YYYY-MM"
     .slice().sort(function(a,b){return String(a.data)<String(b.data)?-1:1;});
   var pp=pfx.split("-"),diasUteis=_pDiasUteis(+pp[0],+pp[1]);
   var contratado=diasUteis*480; // 8h/dia \u00fatil
-  var trab=0,abonado=0,faltaDias=0,faltaMin=0,atDias=0,atMin=0,feriados=0,pendentes=0;
+  var trab=0,abonado=0,faltaDias=0,faltaMin=0,atDias=0,atMin=0,faltaAbDias=0,faltaAbMin=0,feriados=0,pendentes=0;
   regs.forEach(function(r){
     if(r.tipo==="normal"){
       if(_pStatus(r)==="pendente")pendentes++;
@@ -40758,12 +40706,14 @@ function _pResumo(func,pfx){ // pfx "YYYY-MM"
     }
     else if(r.tipo==="atestado_dia"){abonado+=480;atDias++;}
     else if(r.tipo==="atestado_horas"){var q=_pMin(r.qtdMin)||0;abonado+=q;atMin+=q;}
+    else if(r.tipo==="falta_abonada_dia"){abonado+=480;faltaAbDias++;}
+    else if(r.tipo==="falta_abonada_horas"){var q2=_pMin(r.qtdMin)||0;abonado+=q2;faltaAbMin+=q2;}
     else if(r.tipo==="feriado"){abonado+=480;feriados++;}
     else if(r.tipo==="falta_dia")faltaDias++;
     else if(r.tipo==="falta_horas")faltaMin+=_pMin(r.qtdMin)||0;
   });
   var saldo=trab+abonado-contratado;
-  return {regs:regs,diasUteis:diasUteis,contratado:contratado,trab:trab,abonado:abonado,atDias:atDias,atMin:atMin,feriados:feriados,faltaDias:faltaDias,faltaMin:faltaMin,pendentes:pendentes,saldo:saldo};
+  return {regs:regs,diasUteis:diasUteis,contratado:contratado,trab:trab,abonado:abonado,atDias:atDias,atMin:atMin,faltaAbDias:faltaAbDias,faltaAbMin:faltaAbMin,feriados:feriados,faltaDias:faltaDias,faltaMin:faltaMin,pendentes:pendentes,saldo:saldo};
 }
 async function _savePontoNow(){
   var rows=(D.ponto||[]).map(function(p){return PONTO_H.map(function(k){var v=p[k];return (v===undefined||v===null)?"":String(v);});});
@@ -40814,6 +40764,10 @@ function pontoHtml(){
   var optsFunc=FUNC_PONTO.map(function(f){return "<option value='"+f+"'"+(funcPontoSel===f?" selected":"")+">"+f+"</option>";}).join("");
   var R=_pResumo(funcPontoSel,pfx);
   var inp="font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)";
+  // ===== DIAS SEM NENHUM REGISTRO (poss\u00edvel esquecimento de bater ponto) =====
+  var _ppx=pfx.split("-"),_hojeISOg=fdISO(new Date());
+  var _diasComReg=new Set(R.regs.map(function(r){return r.data;}));
+  var diasEsquecidos=_pDiasUteisLista(+_ppx[0],+_ppx[1]).filter(function(d){return d<_hojeISOg&&!_diasComReg.has(d);});
 
   var html=htmlTop;
   // Cabe\u00e7alho
@@ -40855,6 +40809,19 @@ function pontoHtml(){
     html+="</div>";
   }
 
+  // ===== DIAS SEM REGISTRO \u2014 poss\u00edvel esquecimento (s\u00f3 Catarina) =====
+  if(podeEditar&&diasEsquecidos.length>0){
+    html+="<div class='card' style='margin-bottom:16px;border-top:3px solid #D32F2F;background:#FCEBEB'>";
+    html+="<p class='ct' style='color:#A32D2D'><i class='ti ti-alert-triangle'></i> "+diasEsquecidos.length+" dia(s) \u00fatil(eis) de "+funcPontoSel+" sem NENHUM registro \u2014 verificar se esqueceu de bater o ponto</p>";
+    html+="<div style='display:flex;flex-wrap:wrap;gap:8px'>";
+    diasEsquecidos.forEach(function(d){
+      html+="<span style='font-size:12px;font-weight:700;color:#A32D2D;background:#fff;border:1px solid #f0c2c2;border-radius:8px;padding:6px 10px'>"+fd(d)+" ("+_pDiaSemana(d)+")</span>";
+    });
+    html+="</div>";
+    html+="<p style='font-size:11px;color:#8a5a00;margin:10px 0 0'><i class='ti ti-info-circle'></i> Se ela esqueceu mesmo, lance o hor\u00e1rio real no formul\u00e1rio \"Registrar ponto do dia\" com uma observa\u00e7\u00e3o (ex: \"esqueceu de bater \u2014 hor\u00e1rio confirmado com a funcion\u00e1ria\"). O sistema marca automaticamente como \"preenchido manualmente\" para manter o registro transparente.</p>";
+    html+="</div>";
+  }
+
   // ===== PENDENTES DE APROVA\u00c7\u00c3O (s\u00f3 Catarina) =====
   if(podeEditar){
     var pendReg=(D.ponto||[]).filter(function(r){return r.tipo==="normal"&&_pStatus(r)==="pendente";}).sort(function(a,b){return String(a.data)<String(b.data)?1:-1;});
@@ -40883,7 +40850,7 @@ function pontoHtml(){
   html+="<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px'>";
   html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>HORAS CONTRATADAS</div><div style='font-size:22px;font-weight:700;color:#1B5F7A'>"+_pDur(R.contratado)+"</div></div>";
   html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>HORAS TRABALHADAS</div><div style='font-size:22px;font-weight:700;color:#4CAF50'>"+_pDur(R.trab)+"</div></div>";
-  html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>ABONADO (ATESTADO + FERIADO)</div><div style='font-size:22px;font-weight:700;color:#7B5EA7'>"+_pDur(R.abonado)+"</div><div style='font-size:10px;color:var(--mt)'>"+(R.atDias?R.atDias+" dia(s) atestado":"")+(R.atDias&&R.atMin?" + ":"")+(R.atMin?_pDur(R.atMin)+" atestado":"")+(R.feriados?((R.atDias||R.atMin)?" + ":"")+R.feriados+" feriado(s)":"")+((!R.atDias&&!R.atMin&&!R.feriados)?"\u2014":"")+"</div></div>";
+  html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>ABONADO (ATESTADO + FALTA ABONADA + FERIADO)</div><div style='font-size:22px;font-weight:700;color:#7B5EA7'>"+_pDur(R.abonado)+"</div><div style='font-size:10px;color:var(--mt)'>"+[R.atDias?R.atDias+" dia(s) atestado":"",R.atMin?_pDur(R.atMin)+" atestado":"",R.faltaAbDias?R.faltaAbDias+" dia(s) falta abonada":"",R.faltaAbMin?_pDur(R.faltaAbMin)+" falta abonada":"",R.feriados?R.feriados+" feriado(s)":""].filter(Boolean).join(" + ")+((!R.atDias&&!R.atMin&&!R.faltaAbDias&&!R.faltaAbMin&&!R.feriados)?"\u2014":"")+"</div></div>";
   html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>"+saldoLbl+"</div><div style='font-size:22px;font-weight:700;color:"+saldoCor+"'>"+_pDur(Math.abs(R.saldo))+"</div></div>";
   html+="</div>";
   // Descontos por falta n\u00e3o justificada
@@ -40919,7 +40886,8 @@ function pontoHtml(){
   html+="<div class='card'><p class='ct'><i class='ti ti-file-certificate'></i> Falta / Atestado / Feriado</p>";
   html+="<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px'>";
   html+="<div class='fi'><label>Ocorr\u00eancia</label><select id='pt-ocorrencia' onchange='togglePontoOcorrencia()' style='"+inp+"'>";
-  html+="<option value='falta'>Falta / Atestado</option>";
+  html+="<option value='falta'>Falta</option>";
+  html+="<option value='atestado'>Atestado</option>";
   html+="<option value='feriado'>Feriado</option>";
   html+="</select></div>";
   html+="<div class='fi' id='pt-unidade-div'><label>Unidade</label><select id='pt-unidade' onchange='togglePontoQtd()' style='"+inp+"'>";
@@ -40927,7 +40895,7 @@ function pontoHtml(){
   html+="<option value='horas'>Por horas</option>";
   html+="</select></div>";
   html+="</div>";
-  html+="<div id='pt-abono-div' style='margin-bottom:10px;padding:10px;background:var(--b2);border-radius:8px'><label style='display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0'><input type='checkbox' id='pt-abono' checked style='width:16px;height:16px'> Com abono <span style='color:var(--mt);font-weight:400'>(conta como horas trabalhadas)</span></label></div>";
+  html+="<div id='pt-abono-div' style='margin-bottom:10px;padding:10px;background:var(--b2);border-radius:8px'><label style='display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0'><input type='checkbox' id='pt-abono' style='width:16px;height:16px'> Falta abonada <span style='color:var(--mt);font-weight:400'>(conta como horas trabalhadas, sem ser atestado m\u00e9dico \u2014 ex: curso oferecido pela empresa)</span></label></div>";
   html+="<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px'>";
   html+="<div class='fi'><label>Data</label><input type='date' id='pt-data2' value='"+fdISO(new Date())+"' style='"+inp+"'></div>";
   html+="<div class='fi' id='pt-qtd-div' style='display:none'><label>Dura\u00e7\u00e3o (hh:mm)</label><input type='time' id='pt-qtd' style='"+inp+"'></div>";
@@ -40948,7 +40916,7 @@ function pontoHtml(){
     R.regs.forEach(function(r){
       var horasDia="";
       if(r.tipo==="normal")horasDia=_pDur(_pTrabalhado(r));
-      else if(r.tipo==="atestado_dia"||r.tipo==="falta_dia"||r.tipo==="feriado")horasDia="8h (dia)";
+      else if(r.tipo==="atestado_dia"||r.tipo==="falta_dia"||r.tipo==="falta_abonada_dia"||r.tipo==="feriado")horasDia="8h (dia)";
       else horasDia=_pDur(_pMin(r.qtdMin)||0);
       var pendente=r.tipo==="normal"&&_pStatus(r)==="pendente";
       html+="<tr style='border-bottom:1px solid var(--br)'>";
@@ -40960,7 +40928,8 @@ function pontoHtml(){
         html+="<td colspan='4' style='padding:8px;text-align:center;color:var(--mt)'>\u2014</td>";
       }
       html+="<td style='padding:8px;text-align:center;font-weight:700'>"+horasDia+"</td>";
-      html+="<td style='padding:8px;text-align:center'>"+(r.tipo==="normal"?("<span style='font-size:10px;font-weight:700;color:#fff;background:"+(pendente?"#F57C00":"#4CAF50")+";border-radius:12px;padding:2px 8px;white-space:nowrap'>"+(pendente?"Pendente":"Aprovado")+"</span><div style='font-size:9px;color:var(--mt);margin-top:3px;white-space:nowrap'>"+(r.origem==="auto"?"por "+r.func:"lan\u00e7ado por Catarina")+"</div>"):"")+"</td>";
+      var origemBadge=r.tipo==="normal"?("<div style='margin-top:4px'><span style='font-size:9px;font-weight:800;color:#fff;background:"+(r.origem==="auto"?"#1B5F7A":"#D9822B")+";border-radius:10px;padding:2px 7px;white-space:nowrap'><i class='ti ti-"+(r.origem==="auto"?"device-mobile":"pencil")+"'></i> "+(r.origem==="auto"?"Bateu o ponto":"Preenchido manualmente")+"</span></div>"):"";
+      html+="<td style='padding:8px;text-align:center'>"+(r.tipo==="normal"?("<span style='font-size:10px;font-weight:700;color:#fff;background:"+(pendente?"#F57C00":"#4CAF50")+";border-radius:12px;padding:2px 8px;white-space:nowrap'>"+(pendente?"Pendente":"Aprovado")+"</span>"+origemBadge):"")+"</td>";
       html+="<td style='padding:8px;color:var(--mt)'>"+(r.obs||"")+"</td>";
       var acoes="\u2014";
       if(podeEditar){
@@ -40976,9 +40945,10 @@ function pontoHtml(){
   return html;
 }
 function togglePontoOcorrencia(){
-  var isFeriado=document.getElementById("pt-ocorrencia").value==="feriado";
+  var ocorrencia=document.getElementById("pt-ocorrencia").value;
+  var isFeriado=ocorrencia==="feriado";
   document.getElementById("pt-unidade-div").style.display=isFeriado?"none":"block";
-  document.getElementById("pt-abono-div").style.display=isFeriado?"none":"block";
+  document.getElementById("pt-abono-div").style.display=(ocorrencia==="falta")?"block":"none";
   togglePontoQtd();
 }
 function togglePontoQtd(){
@@ -41079,15 +41049,24 @@ function salvarOcorrenciaPonto(){
   var tipo,qtd="";
   if(ocorrencia==="feriado"){
     tipo="feriado";
+  }else if(ocorrencia==="atestado"){
+    var unidadeAt=document.getElementById("pt-unidade").value;
+    if(unidadeAt==="horas"){
+      qtd=_pMin(document.getElementById("pt-qtd").value);
+      if(qtd===null||qtd<=0){alert2("pt-alert2","Informe a dura\u00e7\u00e3o (hh:mm).",false);return;}
+      tipo="atestado_horas";
+    }else{
+      tipo="atestado_dia";
+    }
   }else{
     var unidade=document.getElementById("pt-unidade").value;
     var abono=document.getElementById("pt-abono").checked;
     if(unidade==="horas"){
       qtd=_pMin(document.getElementById("pt-qtd").value);
       if(qtd===null||qtd<=0){alert2("pt-alert2","Informe a dura\u00e7\u00e3o (hh:mm).",false);return;}
-      tipo=abono?"atestado_horas":"falta_horas";
+      tipo=abono?"falta_abonada_horas":"falta_horas";
     }else{
-      tipo=abono?"atestado_dia":"falta_dia";
+      tipo=abono?"falta_abonada_dia":"falta_dia";
     }
   }
   var exist=(D.ponto||[]).find(function(r){return r.func===funcPontoSel&&r.data===data&&r.tipo===tipo;});
@@ -41108,12 +41087,13 @@ function editarPonto(id){
     document.getElementById("pt-alert").innerHTML="<div class='al2 ali'><i class='ti ti-info-circle'></i> Editando "+fd(r.data)+" \u2014 ajuste e clique em Salvar ponto.</div>";
   }else{
     var isFeriado=r.tipo==="feriado";
-    document.getElementById("pt-ocorrencia").value=isFeriado?"feriado":"falta";
-    document.getElementById("pt-unidade").value=(r.tipo==="atestado_horas"||r.tipo==="falta_horas")?"horas":"dia";
-    document.getElementById("pt-abono").checked=(r.tipo==="atestado_dia"||r.tipo==="atestado_horas");
+    var isAtestado=r.tipo==="atestado_dia"||r.tipo==="atestado_horas";
+    document.getElementById("pt-ocorrencia").value=isFeriado?"feriado":(isAtestado?"atestado":"falta");
+    document.getElementById("pt-unidade").value=(r.tipo==="atestado_horas"||r.tipo==="falta_horas"||r.tipo==="falta_abonada_horas")?"horas":"dia";
+    document.getElementById("pt-abono").checked=(r.tipo==="falta_abonada_dia"||r.tipo==="falta_abonada_horas");
     togglePontoOcorrencia();
     document.getElementById("pt-data2").value=r.data;
-    if(r.tipo==="atestado_horas"||r.tipo==="falta_horas")document.getElementById("pt-qtd").value=_pHora(r.qtdMin);
+    if(r.tipo==="atestado_horas"||r.tipo==="falta_horas"||r.tipo==="falta_abonada_horas")document.getElementById("pt-qtd").value=_pHora(r.qtdMin);
     document.getElementById("pt-obs").value=r.obs||"";
     document.getElementById("pt-alert2").innerHTML="<div class='al2 ali'><i class='ti ti-info-circle'></i> Editando "+fd(r.data)+" \u2014 ajuste e clique em Salvar ocorr\u00eancia.</div>";
   }
@@ -41501,7 +41481,7 @@ function visaoAnualHtml(){
   html+="<div class='fi' style='margin-bottom:0'><label style='font-size:11px;font-weight:600;color:var(--mt);display:block;margin-bottom:4px'>ANO</label><select onchange='setAnoVisao(this.value)' style='font-size:13px;padding:7px 10px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'>"+optsAno+"</select></div>";
   html+="</div></div>";
 
-  var linhas=[],totTrab=0,totContratado=0,totFaltaDias=0,totFaltaMin=0,totAtDias=0,totAtMin=0,totFeriados=0,mesesComDados=0;
+  var linhas=[],totTrab=0,totContratado=0,totFaltaDias=0,totFaltaMin=0,totAtDias=0,totAtMin=0,totFaltaAbDias=0,totFaltaAbMin=0,totFeriados=0,mesesComDados=0;
   for(var mNum=1;mNum<=12;mNum++){
     var pfxM=anoVisao+"-"+String(mNum).padStart(2,"0");
     var R=_pResumo(func,pfxM);
@@ -41510,11 +41490,12 @@ function visaoAnualHtml(){
       mesesComDados++;
       totTrab+=R.trab;totContratado+=R.contratado;
       totFaltaDias+=R.faltaDias;totFaltaMin+=R.faltaMin;
-      totAtDias+=R.atDias;totAtMin+=R.atMin;totFeriados+=R.feriados;
+      totAtDias+=R.atDias;totAtMin+=R.atMin;
+      totFaltaAbDias+=R.faltaAbDias;totFaltaAbMin+=R.faltaAbMin;totFeriados+=R.feriados;
     }
     linhas.push({mes:mlbl[mNum],semDados:semDados,R:R});
   }
-  var saldoAno=totTrab-totContratado+ (totAtDias*480+totAtMin+totFeriados*480);
+  var saldoAno=totTrab-totContratado+(totAtDias*480+totAtMin+totFaltaAbDias*480+totFaltaAbMin+totFeriados*480);
 
   // Cards resumo do ano
   html+="<div class='card' style='background:linear-gradient(135deg,#f5f7fa 0%,#e8f4f8 100%);border:1px solid #d1e4ed;margin-bottom:16px'>";
@@ -41524,6 +41505,7 @@ function visaoAnualHtml(){
   html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>FALTAS (DIAS)</div><div style='font-size:20px;font-weight:700;color:#D32F2F'>"+totFaltaDias+"</div></div>";
   html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>FALTAS (HORAS)</div><div style='font-size:20px;font-weight:700;color:#D32F2F'>"+_pDur(totFaltaMin)+"</div></div>";
   html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>ATESTADOS</div><div style='font-size:20px;font-weight:700;color:#7B5EA7'>"+totAtDias+" dia(s) + "+_pDur(totAtMin)+"</div></div>";
+  html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>FALTA ABONADA</div><div style='font-size:20px;font-weight:700;color:#2E8B7A'>"+totFaltaAbDias+" dia(s) + "+_pDur(totFaltaAbMin)+"</div></div>";
   html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>FERIADOS</div><div style='font-size:20px;font-weight:700;color:#F57C00'>"+totFeriados+"</div></div>";
   html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>SALDO (meses c/ registro)</div><div style='font-size:20px;font-weight:700;color:"+(saldoAno>=0?"#4CAF50":"#D32F2F")+"'>"+_pDur(Math.abs(saldoAno))+"</div></div>";
   html+="</div></div>";
@@ -41577,7 +41559,7 @@ function _pDetalhes(func,pfx){
       var falta=-diff;
       var abono=0,faltaReg=0;
       rs.forEach(function(r){
-        if(r.tipo==="atestado_horas")abono+=_pMin(r.qtdMin)||0;
+        if(r.tipo==="atestado_horas"||r.tipo==="falta_abonada_horas")abono+=_pMin(r.qtdMin)||0;
         if(r.tipo==="falta_horas")faltaReg+=_pMin(r.qtdMin)||0;
       });
       var semJust=Math.max(falta-abono-faltaReg,0);
@@ -41616,7 +41598,7 @@ function gerarPDFPonto(){
     R.regs.forEach(function(r){
       var horasDia,oc="";
       if(r.tipo==="normal"){horasDia=_pDur(_pTrabalhado(r));}
-      else if(r.tipo==="atestado_dia"||r.tipo==="falta_dia"||r.tipo==="feriado"){horasDia="8h (dia)";oc=PONTO_TIPO_LBL[r.tipo];}
+      else if(r.tipo==="atestado_dia"||r.tipo==="falta_dia"||r.tipo==="falta_abonada_dia"||r.tipo==="feriado"){horasDia="8h (dia)";oc=PONTO_TIPO_LBL[r.tipo];}
       else{horasDia=_pDur(_pMin(r.qtdMin)||0);oc=PONTO_TIPO_LBL[r.tipo];}
       if(r.obs)oc+=(oc?" \u2014 ":"")+prEsc(r.obs);
       var e4=r.tipo==="normal"?"<td>"+_pHora(r.entMin)+"</td><td>"+_pHora(r.salMin)+"</td><td>"+_pHora(r.retMin)+"</td><td>"+_pHora(r.saiMin)+"</td>":"<td colspan='4' style='color:#98a2b0'>\u2014</td>";
@@ -41629,7 +41611,7 @@ function gerarPDFPonto(){
   h+="<table class='pdf-tbl'><tbody>";
   h+="<tr><td>Horas contratadas ("+R.diasUteis+" dias \u00fateis x 8h)</td><td style='font-weight:700'>"+_pDur(R.contratado)+"</td></tr>";
   h+="<tr><td>Horas trabalhadas</td><td style='font-weight:700'>"+_pDur(R.trab)+"</td></tr>";
-  h+="<tr><td>Horas abonadas (atestado + feriado)</td><td style='font-weight:700'>"+_pDur(R.abonado)+((R.atDias||R.atMin||R.feriados)?" ("+[R.atDias?R.atDias+" dia(s) atestado":"",R.atMin?_pDur(R.atMin)+" atestado":"",R.feriados?R.feriados+" feriado(s)":""].filter(Boolean).join(" + ")+")":"")+"</td></tr>";
+  h+="<tr><td>Horas abonadas (atestado + falta abonada + feriado)</td><td style='font-weight:700'>"+_pDur(R.abonado)+((R.atDias||R.atMin||R.faltaAbDias||R.faltaAbMin||R.feriados)?" ("+[R.atDias?R.atDias+" dia(s) atestado":"",R.atMin?_pDur(R.atMin)+" atestado":"",R.faltaAbDias?R.faltaAbDias+" dia(s) falta abonada":"",R.faltaAbMin?_pDur(R.faltaAbMin)+" falta abonada":"",R.feriados?R.feriados+" feriado(s)":""].filter(Boolean).join(" + ")+")":"")+"</td></tr>";
   h+="<tr><td style='font-weight:700;color:"+(R.saldo>=0?"#2e7d32":"#c62828")+"'>"+(R.saldo>=0?"Horas excedentes":"Horas em falta")+"</td><td style='font-weight:800;color:"+(R.saldo>=0?"#2e7d32":"#c62828")+"'>"+_pDur(Math.abs(R.saldo))+"</td></tr>";
   if(R.faltaDias>0||R.faltaMin>0){
     var descTxt=[];
@@ -41664,7 +41646,7 @@ function gerarPDFPonto(){
     h+="<tr style='background:#f7f9fb'><td style='font-weight:800;color:#0b1e35;width:22%'>Dia</td><td style='font-weight:800;color:#0b1e35;width:20%'>Saiu mais cedo</td><td style='font-weight:800;color:#0b1e35'>Justificativa</td></tr>";
     DET.antecipadas.forEach(function(a){
       var just=[];
-      if(a.abono>0)just.push("com abono (atestado de "+_pDur(a.abono)+")");
+      if(a.abono>0)just.push("com abono (atestado/falta abonada de "+_pDur(a.abono)+")");
       if(a.faltaReg>0)just.push("falta não justificada registrada ("+_pDur(a.faltaReg)+")");
       if(a.semJust>0)just.push("sem abono ("+_pDur(a.semJust)+")");
       var txt=just.join(" + ")||"sem abono";
