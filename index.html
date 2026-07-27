@@ -34198,7 +34198,6 @@ navAll.push({id:"alunos",icon:"ti-users",label:"Alunos"});
 navAll.push({id:"feedbacks",icon:"ti-message-circle-2",label:"Feedbacks"});
 navAll.push({id:"prontuario",icon:"ti-notes",label:"Prontuário"});
 navAll.push({id:"relatorios_pedagogicos",icon:"ti-file-text",label:"Relatórios"});
-navAll.push({id:"ponto",icon:"ti-clock",label:"Perfil do Funcionário"});
 }else{
 navAll.push({id:"relatorio",icon:"ti-file-export",label:"Relatório"});
 if(isCat||user.role==="Secretaria")navAll.push({id:"ponto",icon:"ti-clock",label:"Perfil do Funcionário"});
@@ -34650,7 +34649,7 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
     // e o alerta de uso de imagem numa coluna lateral compacta.
     var profNomeAmanda=(user.name||"").replace("Professora ","").trim()||"Amanda";
     return heroSimplesHtml
-      +aniversarioBannerHtml()+mensagemDoDiaHtml()+baterPontoCardHtml()
+      +aniversarioBannerHtml()+mensagemDoDiaHtml()
       +evolucoesPendentesCardHtml(profNomeAmanda)
       +"<div class='painel-2col'>"
       +"<div>"+agendaHojeCardHtml(profNomeAmanda)+feedbacksDoMesCardHtml()+"</div>"
@@ -41083,7 +41082,7 @@ function _pGeoBtn(r,campo){
   return " <i class='ti ti-map-pin-off' style='color:var(--mt)' title='Localiza\u00e7\u00e3o indispon\u00edvel neste registro'></i>";
 }
 async function baterPonto(){
-  if(!user||(user.role!=="Secretaria"&&user.role!=="Professora"))return;
+  if(!user||user.role!=="Secretaria")return;
   if(!_umaVez("baterPonto"))return;
   var func=user.role==="Secretaria"?"Nicoli":"Amanda";
   var hoje=fdISO(new Date());
