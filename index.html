@@ -33583,17 +33583,40 @@ function ativosNoMes(pfxAnoMes){
   });
 }
 function cancelados(){return todosObj().filter(function(a){return eCanc(a.nome);});}
+// Primeiro evento de MATRÍCULA de um aluno especificamente COM CADA PROFESSORA — usado para que,
+// na visão de UMA professora (profFiltro), a entrada dele nesse serviço conte como "nova matrícula"
+// para ELA, mesmo que o aluno já fosse matriculado antes em outra modalidade com outra professora.
+function _primeiroEventoPorAlunoEProf(){
+  var primeiro={};
+  (D.historico||[]).forEach(function(h){
+    if(!h.dataEvento||h.evento!=="matricula")return;
+    var k=h.nome+"|"+(h.prof||"");
+    if(!primeiro[k]||h.dataEvento<primeiro[k].dataEvento)primeiro[k]=h;
+  });
+  return primeiro;
+}
 function _movimentacoesMes(anoMes,profFiltro){
   // anoMes = "YYYY-MM". Baseado nos eventos registrados em D.historico (aba Matrículas).
   // profFiltro (opcional) = nome da professora ("Amanda"/"Nathalia"/"Lilian") — quando informado,
   // conta só matrículas/renovações/cancelamentos dos alunos dessa professora.
   var pfx=anoMes+"-";
   var primeiros=_primeiroEventoPorAluno();
-  // "Novas" só conta um evento "matricula" se ele for REALMENTE o primeiro evento desse aluno.
-  // Isso evita que uma renovação seja contabilizada como matrícula nova (ex: quando o histórico
-  // precisou ser reconstruído e criou um registro de apoio).
+  var primeirosPorProf=_primeiroEventoPorAlunoEProf();
+  // "Novas" só conta um evento "matricula" se ele for REALMENTE o primeiro evento desse aluno —
+  // isso evita que uma renovação seja contabilizada como matrícula nova. EXCEÇÃO: quando a consulta
+  // é filtrada por professora (profFiltro), o critério passa a ser "primeira vez que ESSE ALUNO
+  // matriculou COM ESSA PROFESSORA" — assim, se um aluno da Amanda também passa a fazer Karatê com
+  // a Lilian, isso aparece como "matrícula nova" no painel/estatística DELA, mesmo já sendo aluno.
   var novasLista=(D.historico||[]).filter(function(h){
-    return h.evento==="matricula"&&h.dataEvento&&h.dataEvento.startsWith(pfx)&&primeiros[h.nome]===h&&(!profFiltro||h.prof===profFiltro);
+    if(h.evento!=="matricula"||!h.dataEvento||!h.dataEvento.startsWith(pfx))return false;
+    if(profFiltro)return h.prof===profFiltro&&primeirosPorProf[h.nome+"|"+h.prof]===h;
+    return primeiros[h.nome]===h;
+  });
+  // "Serviços extras" (Catarina/global): matrículas de um serviço ADICIONAL — ou seja, evento de
+  // matrícula que NÃO é o primeiro evento do aluno na vida (ele já era matriculado em outra coisa).
+  // É exatamente o que a aba "Serviços" no perfil do aluno gera.
+  var extrasLista=(D.historico||[]).filter(function(h){
+    return h.evento==="matricula"&&h.dataEvento&&h.dataEvento.startsWith(pfx)&&primeiros[h.nome]!==h&&(!profFiltro||h.prof===profFiltro);
   });
   var renovadasLista=(D.historico||[]).filter(function(h){return h.evento==="renovacao"&&h.dataEvento&&h.dataEvento.startsWith(pfx)&&(!profFiltro||h.prof===profFiltro);});
   // Cancelamentos: usa D.canc como fonte principal (é a mesma fonte que mostra "Cancelado em" nas telas),
@@ -33606,8 +33629,8 @@ function _movimentacoesMes(anoMes,profFiltro){
     return {nome:c.nome,plano:(histCanc&&histCanc.plano)||(d&&d.plano)||"",valor:(histCanc&&histCanc.valor)||(d&&d.valor)||0,dataEvento:c.data,prof:(histCanc&&histCanc.prof)||(d&&d.prof)||""};
   }).filter(function(c){return !profFiltro||c.prof===profFiltro;});
   var ativasLista=ativosNoMes(anoMes).filter(function(a){return !profFiltro||a.prof===profFiltro;});
-  return {novas:novasLista.length,renovadas:renovadasLista.length,canceladas:canceladasLista.length,ativas:ativasLista.length,
-    novasLista:novasLista,renovadasLista:renovadasLista,canceladasLista:canceladasLista,ativasLista:ativasLista};
+  return {novas:novasLista.length,renovadas:renovadasLista.length,canceladas:canceladasLista.length,ativas:ativasLista.length,extras:extrasLista.length,
+    novasLista:novasLista,renovadasLista:renovadasLista,canceladasLista:canceladasLista,ativasLista:ativasLista,extrasLista:extrasLista};
 }
 function getDados(nome){var m=D.mat.find(function(x){return x.nome===nome;});if(m)return m;return AF.find(function(a){return a.nome===nome;})||null;}
 function BRL(v){return "R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -37066,7 +37089,7 @@ function _dadosDeclaracaoFaturamento(mesAno){
 
   return {mesNum:mesNum,ano:ano,nomeMes:nomeMes,periodoIni:periodoIni,periodoFim:periodoFim,
     faturamentoBruto:faturamentoBruto,integrais:integrais,proporcionais:proporcionais,avulsas:pagAvulsa,
-    matriculasNovas:mov.novas,rematriculas:mov.renovadas,cancelamentos:mov.canceladas,
+    matriculasNovas:mov.novas,rematriculas:mov.renovadas,cancelamentos:mov.canceladas,servicosExtras:mov.extras,
     plMensal:plMensal,plTrimestral:plTrimestral,plSemestral:plSemestral,plAnual:plAnual,
     totalAtivos:atvList.length};
 }
@@ -37191,6 +37214,7 @@ async function gerarDeclaracaoFaturamentoWord(){
           p({children:[t("Alunos ativos no plano semestral: "+String(d.plSemestral).padStart(2,"0"))]}),
           p({children:[t("Alunos ativos no plano anual: "+String(d.plAnual).padStart(2,"0"))]}),
           p({children:[t("Rematrículas: "+String(d.rematriculas).padStart(2,"0"))]}),
+          ...(d.servicosExtras>0?[p({children:[t("Contratações de serviços adicionais: "+String(d.servicosExtras).padStart(2,"0"))]})]:[]),
           p({children:[t("Cancelamentos: "+String(d.cancelamentos).padStart(2,"0"))]}),
           p({spacing:{after:300},children:[t("Alunos ativos total: "+String(d.totalAtivos).padStart(2,"0"),{bold:true})]}),
 
@@ -37272,6 +37296,15 @@ function relHtml(){
     +"<div class='kpi'><div class='ka' style='background:var(--rd)'></div><p class='kl'>Canceladas</p><p class='kv' style='color:var(--rd)'>"+mov.canceladas+"</p><p class='ks'>cancelamentos no m\u00eas</p></div>"
     +"<div class='kpi'><div class='ka' style='background:var(--pu)'></div><p class='kl'>Novas</p><p class='kv' style='color:var(--pu)'>"+mov.novas+"</p><p class='ks'>matr\u00edculas novas no m\u00eas</p></div>"
     +"</div></div>"
+    // Serviços extras — aluno já matriculado que passou a fazer também outra modalidade
+    // (ex: Ginástica + Karatê). Não é matrícula nova, mas fica contabilizado à parte.
+    +"<div class='card' style='margin-bottom:16px;border-left:4px solid #5E35B1;background:#F3E5F5'>"
+    +"<p class='ct' style='margin-bottom:2px'><i class='ti ti-layers-union'></i> Servi\u00e7os Extras <span style='font-size:11px;color:var(--mt);font-weight:400'>(alunos j\u00e1 matriculados que passaram a fazer tamb\u00e9m outra modalidade)</span></p>"
+    +"<div style='display:flex;align-items:baseline;gap:8px;margin:6px 0 10px'><span style='font-size:28px;font-weight:800;color:#5E35B1'>"+mov.extras+"</span><span style='font-size:12px;color:var(--mt)'>contrata\u00e7\u00e3o(\u00f5es) de servi\u00e7o adicional no m\u00eas</span></div>"
+    +(mov.extras>0?"<div class='ox'><table><thead><tr><th>Aluno</th><th>Servi\u00e7o</th><th>Professora</th><th>Data</th></tr></thead><tbody>"
+      +mov.extrasLista.map(function(h){var mi=_modalidadeInfo(h.prof);return "<tr><td style='font-weight:600'>"+h.nome.split(" ").slice(0,2).join(" ")+"</td><td><span class='badge' style='background:"+mi.bg+";color:"+mi.cor+"'>"+mi.nome+"</span></td><td>"+(h.prof||"—")+"</td><td>"+fd(h.dataEvento)+"</td></tr>";}).join("")
+      +"</tbody></table></div>":"<p style='font-size:12px;color:var(--mt);margin:0'>Nenhuma contrata\u00e7\u00e3o de servi\u00e7o extra neste m\u00eas.</p>")
+    +"</div>"
     // Dashboard de planos + financeiro — apenas Gestora
     +(user.role==="Gestora"
       ? "<div class='card' style='margin-bottom:16px;border-top:3px solid var(--brand)'>"
@@ -37570,6 +37603,7 @@ function exportPDF(tipoRel){
     +"<tr><td>Matrículas Renovadas</td><td class='valor-destaque'>"+mov.renovadas+"</td></tr>"
     +"<tr><td>Matrículas Canceladas</td><td class='valor-destaque'>"+mov.canceladas+"</td></tr>"
     +"<tr><td>Matrículas Novas</td><td class='valor-destaque'>"+mov.novas+"</td></tr>"
+    +"<tr><td>Serviços Adicionais Contratados</td><td class='valor-destaque'>"+mov.extras+"</td></tr>"
     +"</tbody></table></div>";
   
   // --- RECEBIMENTOS ---
@@ -37666,6 +37700,7 @@ function exportPDFMovimentacoes(){
     +".section-title.first{margin-top:0}"
     +".kpi-grid{display:grid;gap:10px;margin-bottom:4px}"
     +".kpi-grid-4{grid-template-columns:repeat(4,1fr)}"
+    +".kpi-grid-5{grid-template-columns:repeat(5,1fr)}"
     +".kpi-card{background:#F7F9FC;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;position:relative;overflow:hidden}"
     +".kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:8px 8px 0 0}"
     +".kpi-card.verde::before{background:linear-gradient(90deg,#1a7f4c,#27ae60)}"
@@ -37709,6 +37744,10 @@ function exportPDFMovimentacoes(){
     return "<tr><td>"+h.nome.split(" ").slice(0,3).join(" ")+"</td><td>"+fd(h.dataMatricula||h.dataEvento)+"</td><td>"+(h.plano||"—")+"</td><td class='valor-destaque'>"+BRL(h.valor)+"</td></tr>";
   }).join("")||linhaVazia(4);
 
+  var extrasRows=mov.extrasLista.slice().sort(function(a,b){return (a.dataEvento||"")<(b.dataEvento||"")?-1:1;}).map(function(h){
+    return "<tr><td>"+h.nome.split(" ").slice(0,3).join(" ")+"</td><td>"+(h.prof||"—")+"</td><td>"+fd(h.dataMatricula||h.dataEvento)+"</td><td>"+(h.plano||"—")+"</td></tr>";
+  }).join("")||linhaVazia(4);
+
   var bodyHTML="<div class='header'><div class='header-inner'>"
     +"<div class='header-brand'>Relatório de Movimentações</div>"
     +"<div class='header-right'><div class='header-tipo'>Matrículas</div><div class='header-mes'>"+mesTitulo+"</div>"
@@ -37717,11 +37756,12 @@ function exportPDFMovimentacoes(){
 
   bodyHTML+="<div class='body'>";
   bodyHTML+="<div class='section-title first'>Resumo do Mês</div>"
-    +"<div class='kpi-grid kpi-grid-4'>"
+    +"<div class='kpi-grid kpi-grid-5'>"
     +"<div class='kpi-card azul'><div class='kpi-label'>Alunos Ativos</div><div class='kpi-value azul'>"+mov.ativas+"</div><div class='kpi-sub'>no mês selecionado</div></div>"
     +"<div class='kpi-card verde'><div class='kpi-label'>Novas Matrículas</div><div class='kpi-value verde'>"+mov.novas+"</div><div class='kpi-sub'>no mês</div></div>"
     +"<div class='kpi-card roxo'><div class='kpi-label'>Rematrículas</div><div class='kpi-value roxo'>"+mov.renovadas+"</div><div class='kpi-sub'>renovações no mês</div></div>"
     +"<div class='kpi-card vermelho'><div class='kpi-label'>Cancelamentos</div><div class='kpi-value vermelho'>"+mov.canceladas+"</div><div class='kpi-sub'>no mês</div></div>"
+    +"<div class='kpi-card roxo'><div class='kpi-label'>Serviços Extras</div><div class='kpi-value roxo'>"+mov.extras+"</div><div class='kpi-sub'>contratações no mês</div></div>"
     +"</div>";
 
   bodyHTML+="<div class='section-title'>Alunos Ativos ("+mov.ativas+")</div>"
@@ -37735,6 +37775,10 @@ function exportPDFMovimentacoes(){
   bodyHTML+="<div class='section-title'>Novas Matrículas no Mês ("+mov.novas+")</div>"
     +"<div class='table-wrap'><table><thead><tr><th>Aluno</th><th>Data</th><th>Plano</th><th>Valor</th></tr></thead>"
     +"<tbody>"+novasRows+"</tbody></table></div>";
+
+  bodyHTML+="<div class='section-title'>Serviços Extras Contratados no Mês ("+mov.extras+")</div>"
+    +"<div class='table-wrap'><table><thead><tr><th>Aluno</th><th>Professora</th><th>Data</th><th>Plano</th></tr></thead>"
+    +"<tbody>"+extrasRows+"</tbody></table></div>";
 
   bodyHTML+="<div class='section-title'>Cancelamentos no Mês ("+mov.canceladas+")</div>"
     +"<div class='table-wrap'><table><thead><tr><th>Aluno</th><th>Data</th><th>Plano</th><th>Valor</th></tr></thead>"
