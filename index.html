@@ -34086,7 +34086,7 @@ async function syncAll(){
   "ponto",
   "salario",
   "logs",
-  "servExtras"
+  "servicosExtras"
 ];
 
 var abas=[
@@ -35389,7 +35389,8 @@ function matHtml(){
     +"<div class='ox'><table><thead><tr><th>Nome</th><th>Dias/Hor\u00e1rio</th><th>Professora</th><th>Matr\u00edcula</th><th>A\u00e7\u00f5es</th></tr></thead><tbody>"
     +todosBols.map(function(a){
       var mi=_modalidadeInfo(a.prof);
-      return "<tr><td style='font-weight:600;cursor:pointer;color:var(--brand2)' onclick=\"editarMatricula('"+a.nome.replace(/'/g,"\\'")+"')\"><span title='"+mi.nome+"' style='display:inline-block;width:9px;height:9px;border-radius:50%;background:"+mi.cor+";margin-right:7px'></span>"+a.nome.split(" ").slice(0,2).join(" ")+"&nbsp;<span class='badge bpu' style='font-size:10px'>Bolsista</span></td>"
+      var extrasDot=_servicosExtrasDoAluno(a.nome).map(function(e){var em=_modalidadeInfo(e.prof);return "<span title='Tamb\u00e9m faz "+em.nome+" \u2014 Prof. "+e.prof+"' style='display:inline-block;width:9px;height:9px;border-radius:50%;background:"+em.cor+";margin-right:4px;border:1px solid #fff'></span>";}).join("");
+      return "<tr><td style='font-weight:600;cursor:pointer;color:var(--brand2)' onclick=\"editarMatricula('"+a.nome.replace(/'/g,"\\'")+"')\"><span title='"+mi.nome+"' style='display:inline-block;width:9px;height:9px;border-radius:50%;background:"+mi.cor+";margin-right:7px'></span>"+extrasDot+a.nome.split(" ").slice(0,2).join(" ")+"&nbsp;<span class='badge bpu' style='font-size:10px'>Bolsista</span></td>"
         +"<td style='font-size:12px'>"+(a.diasSem||"—")+" &middot; "+(a.horario||"—")+"</td>"
         +"<td style='font-size:12px'><span class='badge' style='background:"+mi.bg+";color:"+mi.cor+"'>"+(a.prof||"—")+"</span></td>"
         +"<td style='font-size:11px'>"+fd(a.dataMatricula)+"</td>"
