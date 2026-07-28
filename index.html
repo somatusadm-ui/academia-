@@ -33539,6 +33539,7 @@ async function adicionarServicoExtra(nome){
   var ok2=await saveHistoricoAll();
   if(!ok1||!ok2){if(msgEl)msgEl.innerHTML="<div class='al2 ali'><i class='ti ti-alert-triangle'></i> Erro ao salvar. Verifique se a aba \"servicosextras\" existe na planilha.</div>";return;}
   editarMatricula(nome);
+  refreshContent();
   setTimeout(function(){var m=document.getElementById("sv-msg");if(m)m.innerHTML="<div class='al2 als'><i class='ti ti-check'></i> Servi\u00e7o adicionado! J\u00e1 aparece no hist\u00f3rico dele.</div>";},60);
 }
 async function removerServicoExtra(id,nome){
@@ -33547,6 +33548,7 @@ async function removerServicoExtra(id,nome){
   var ok=await saveServicosExtras();
   if(!ok){alert("Erro ao salvar. Verifique se a aba \"servicosextras\" existe na planilha.");return;}
   editarMatricula(nome);
+  refreshContent();
 }
 // Retorna, para cada aluno, o evento mais antigo registrado no histórico (por data).
 // Isso representa a matrícula ORIGINAL de verdade, mesmo que o campo dataMatricula
