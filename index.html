@@ -40780,12 +40780,12 @@ function pdfCssPremium(){
   +".pdf-footer{padding:18px 40px 30px;border-top:1px solid #e7ebf1;margin-top:18px;display:flex;justify-content:space-between;font-size:9.5px;color:#98a2b0}"
   +"</style>";
 }
-function pdfHeaderPremium(eyebrow,titulo,sub,mi){
+function pdfHeaderPremium(eyebrow,titulo,sub,mi,logoTag){
   var h="<div class='pdf-header'><div class='pdf-eyebrow'>"+eyebrow+"</div>";
   h+="<div class='pdf-title'>"+prEsc(titulo)+"</div>";
   h+="<div class='pdf-sub'>"+prEsc(sub)+"</div>";
   if(mi)h+="<div class='pdf-meta'><span><b>"+mi+"</b></span></div>";
-  h+="<div class='pdf-logo'><b>Ge Dois Academia</b>Prontuário Pedagógico</div>";
+  h+="<div class='pdf-logo'><b>Ge Dois Academia</b>"+(logoTag||"Prontuário Pedagógico")+"</div>";
   h+="</div>";
   return h;
 }
@@ -40850,8 +40850,10 @@ function gerarPDFEvolucao(){
   if(!rpAluno){alert("Selecione um aluno.");return;}
   var per=rpModo==="periodo"?("Período: "+(rpIni?fd(rpIni):"início")+" a "+(rpFim?fd(rpFim):"hoje")):"Relatório completo — todas as datas";
   var mi=rpMatriculaInfo(rpAluno);
+  var profNomeAtual=(user.name||"").replace("Professora ","").trim()||"Amanda";
+  var logoTag="Prontuário — "+_modalidadeInfo(profNomeAtual).nome;
   var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap' rel='stylesheet'>"+pdfCssPremium()+"</head><body><div class='sheet'>";
-  h+=pdfHeaderPremium("Relatório de Acompanhamento","Evolução, Plano e Feedback — "+rpAluno,per,mi);
+  h+=pdfHeaderPremium("Relatório de Acompanhamento","Evolução, Plano e Feedback — "+rpAluno,per,mi,logoTag);
   h+="<div class='pdf-body'>"+relEvolucaoConteudo(rpAluno,true)+"</div>";
   h+=pdfFooterPremium();
   h+="</div></body></html>";
@@ -40893,8 +40895,10 @@ function gerarPDFAvaliacoes(){
   if(rpAvModo==="uma"&&!rpAvData){alert("Selecione a data da avaliação.");return;}
   var tit=rpAvModo==="uma"?"Avaliação — "+rpAluno:"Todas as Avaliações — "+rpAluno;
   var mi=rpMatriculaInfo(rpAluno);
+  var profNomeAtual2=(user.name||"").replace("Professora ","").trim()||"Amanda";
+  var logoTag2="Prontuário — "+_modalidadeInfo(profNomeAtual2).nome;
   var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap' rel='stylesheet'>"+pdfCssPremium()+"</head><body><div class='sheet'>";
-  h+=pdfHeaderPremium("Relatório de Acompanhamento",tit,rpAvModo==="uma"?"Avaliação individual":"Histórico completo de avaliações",mi);
+  h+=pdfHeaderPremium("Relatório de Acompanhamento",tit,rpAvModo==="uma"?"Avaliação individual":"Histórico completo de avaliações",mi,logoTag2);
   h+="<div class='pdf-body'>"+relAvaliacoesConteudo(rpAluno,true)+"</div>";
   h+=pdfFooterPremium();
   h+="</div></body></html>";
