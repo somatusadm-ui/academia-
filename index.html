@@ -39457,7 +39457,7 @@ function atualizarIdadePerfil(){
 // usado em telas onde vale ter esse contexto rápido sem abrir o perfil completo.
 function perfilDadosBasicosResumo(nome){
   var perfil=getPerfil(nome)||{};
-  var dataMat=dataPrimeiraMatricula(nome);
+  var infoMat=_dataMatriculaParaVisualizacao(nome);
   var idade=perfil.dataNasc?calcIdade(perfil.dataNasc):null;
   var avatarLetras=nome.split(" ").slice(0,2).map(function(w){return w[0];}).join("").toUpperCase();
   var campo=function(icon,label,valor){
@@ -39476,10 +39476,12 @@ function perfilDadosBasicosResumo(nome){
   h+="<p style='font-size:11.5px;opacity:.85;margin:3px 0 0'>"+(idade!==null?idade+" ano"+(idade===1?"":"s"):"Ficha do aluno")+"</p>";
   h+="</div></div>";
   h+="<div style='padding:16px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px 14px'>";
-  h+=campo("ti-calendar-plus","1ª Matrícula",dataMat?fd(dataMat):"");
+  h+=campo("ti-calendar-plus","Matrícula ("+infoMat.label+")",infoMat.data?fd(infoMat.data):"");
   h+=campo("ti-cake","Data de nascimento",perfil.dataNasc?fd(perfil.dataNasc):"");
   h+=campo("ti-user","Nome da mãe",perfil.nomeMae);
   h+=campo("ti-user","Nome do pai",perfil.nomePai);
+  var servicosLbl=_servicosLabelAluno(nome);
+  if(servicosLbl)h+=campo("ti-layers-union","Serviços",servicosLbl);
   h+="</div></div>";
   return h;
 }
@@ -40423,7 +40425,9 @@ async function exportarFeedbackWord(alunoParam,textoParam){
   var a=todosObj().find(function(x){return x.nome===aluno;})||{};
   var perfil=getPerfil(aluno)||{};
   var idadeTxt=perfil.dataNasc?idadeAnosMesesLabel(perfil.dataNasc):"";
-  var inicioAulas=dataPrimeiraMatricula(aluno)||a.dataMatricula||"";
+  var infoMatFb=_dataMatriculaParaVisualizacao(aluno);
+  var inicioAulas=infoMatFb.data||a.dataMatricula||"";
+  var servicosFb=_servicosLabelAluno(aluno);
   var hojeIso=fdISO(new Date());
 
   var corpo="";
@@ -40431,7 +40435,8 @@ async function exportarFeedbackWord(alunoParam,textoParam){
   corpo+=_campoPara("Data de nascimento",perfil.dataNasc?fd(perfil.dataNasc):"");
   corpo+=_campoPara("Idade",idadeTxt);
   corpo+=_campoPara("Professora",PROFESSORA_DOC_INFO.nomeCompleto);
-  corpo+=_campoPara("Início das aulas",inicioAulas?dataPorExtenso(inicioAulas):"");
+  corpo+=_campoPara("Início das aulas ("+infoMatFb.label+")",inicioAulas?dataPorExtenso(inicioAulas):"");
+  if(servicosFb)corpo+=_campoPara("Serviços",servicosFb);
   corpo+=_wPara("",null,200);
 
   corpo+=_wPara(_wRun("RELATÓRIO DE EVOLUÇÃO DO DESENVOLVIMENTO",{bold:true,size:26}),"center",200);
@@ -40636,10 +40641,37 @@ function primeiraMatriculaData(aluno){
   var a=todosObj().find(function(x){return x.nome===aluno;});
   return a?(a.dataMatricula||""):"";
 }
+// Retorna "Somente Ginástica" / "Somente Karatê" / "Ginástica e Karatê", conforme os serviços
+// (principal + extras) em que o aluno está matriculado.
+function _servicosLabelAluno(aluno){
+  var d=getDados(aluno);
+  var mods={};
+  if(d&&d.prof)mods[_modalidadeInfo(d.prof).nome]=true;
+  _servicosExtrasDoAluno(aluno).forEach(function(e){mods[_modalidadeInfo(e.prof).nome]=true;});
+  var lista=Object.keys(mods);
+  if(lista.length===0)return "";
+  if(lista.length===1)return "Somente "+lista[0];
+  return lista.join(" e ");
+}
+// Data de matrícula NO SERVIÇO da professora logada — ex: se a Lilian está vendo o prontuário de
+// um aluno que já era da Ginástica com a Amanda antes de matricular no Karatê com ela, aqui aparece
+// a data em que ELE ENTROU NO KARATÊ, não a data da 1ª matrícula geral do aluno na academia.
+// Para Catarina/Secretaria (sem modalidade própria), cai no fallback da 1ª matrícula mesmo.
+function _dataMatriculaParaVisualizacao(aluno){
+  var profNome=user.role==="Professora"?((user.name||"").replace("Professora ","").trim()||"Amanda"):null;
+  var d=getDados(aluno);
+  if(profNome){
+    if(d&&d.prof===profNome)return {data:d.dataMatricula||d.data||"",label:_modalidadeInfo(profNome).nome};
+    var extra=_servicosExtrasDoAluno(aluno).find(function(e){return e.prof===profNome;});
+    if(extra)return {data:extra.data,label:_modalidadeInfo(profNome).nome};
+  }
+  return {data:primeiraMatriculaData(aluno),label:"1ª"};
+}
 function rpMatriculaInfo(aluno){
-  var d=primeiraMatriculaData(aluno);
-  if(!d)return "";
-  return "Matrícula (1ª): "+fd(d);
+  var info=_dataMatriculaParaVisualizacao(aluno);
+  if(!info.data)return "";
+  var servicos=_servicosLabelAluno(aluno);
+  return "Matrícula ("+info.label+"): "+fd(info.data)+(servicos?" &middot; Serviços: "+servicos:"");
 }
 function relatoriosPedagogicosHtml(){
   if(!D.pront)D.pront=[];
@@ -40819,7 +40851,7 @@ function gerarPDFEvolucao(){
   var per=rpModo==="periodo"?("Período: "+(rpIni?fd(rpIni):"início")+" a "+(rpFim?fd(rpFim):"hoje")):"Relatório completo — todas as datas";
   var mi=rpMatriculaInfo(rpAluno);
   var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap' rel='stylesheet'>"+pdfCssPremium()+"</head><body><div class='sheet'>";
-  h+=pdfHeaderPremium("Relatório Pedagógico","Evolução, Plano e Feedback — "+rpAluno,per,mi);
+  h+=pdfHeaderPremium("Relatório de Acompanhamento","Evolução, Plano e Feedback — "+rpAluno,per,mi);
   h+="<div class='pdf-body'>"+relEvolucaoConteudo(rpAluno,true)+"</div>";
   h+=pdfFooterPremium();
   h+="</div></body></html>";
@@ -40862,7 +40894,7 @@ function gerarPDFAvaliacoes(){
   var tit=rpAvModo==="uma"?"Avaliação — "+rpAluno:"Todas as Avaliações — "+rpAluno;
   var mi=rpMatriculaInfo(rpAluno);
   var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap' rel='stylesheet'>"+pdfCssPremium()+"</head><body><div class='sheet'>";
-  h+=pdfHeaderPremium("Relatório Pedagógico",tit,rpAvModo==="uma"?"Avaliação individual":"Histórico completo de avaliações",mi);
+  h+=pdfHeaderPremium("Relatório de Acompanhamento",tit,rpAvModo==="uma"?"Avaliação individual":"Histórico completo de avaliações",mi);
   h+="<div class='pdf-body'>"+relAvaliacoesConteudo(rpAluno,true)+"</div>";
   h+=pdfFooterPremium();
   h+="</div></body></html>";
