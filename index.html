@@ -33419,7 +33419,7 @@ function getMesAtual(){var d=new Date(),ms=["Janeiro","Fevereiro","Marco","Abril
 var MES=getMesAtual();
 var MES_ANO=(function(){var d=new Date();return{m:d.getMonth()+1,a:d.getFullYear()};})();
 // Senhas armazenadas como SHA-256 (não ficam mais legíveis no código-fonte)
-var SENHAS_HASH={Catarina:"03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",Secretaria:"770212214c3d2a29c48bbe0931750fa64021b76e4d1533b78ed838c392430e6b","Professora Amanda":"14cae243f043579fcc8c33e98f4252cf4d237758d734f39cc0a7452931b2eab8"};
+var SENHAS_HASH={Catarina:"03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",Secretaria:"770212214c3d2a29c48bbe0931750fa64021b76e4d1533b78ed838c392430e6b","Professora Amanda":"14cae243f043579fcc8c33e98f4252cf4d237758d734f39cc0a7452931b2eab8","Professora Lilian":"98b7d50c3622b21ea01d10b23c0bd7ff65e42a5081efd839d9d194c61026dc05"};
 async function sha256hex(s){var b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,"0");}).join("");}
 var TAXA={PIX:0,Boleto:1.89,"PIX Boleto":1.25,Dinheiro:0};
 var DIAS=["Domingo","Segunda","Terca","Quarta","Quinta","Sexta","Sabado","Segunda e Quarta","Terca e Quinta","Segunda, Quarta e Sexta","Terca, Quinta e Sabado"];
@@ -33547,17 +33547,19 @@ function ativosNoMes(pfxAnoMes){
   });
 }
 function cancelados(){return todosObj().filter(function(a){return eCanc(a.nome);});}
-function _movimentacoesMes(anoMes){
+function _movimentacoesMes(anoMes,profFiltro){
   // anoMes = "YYYY-MM". Baseado nos eventos registrados em D.historico (aba Matrículas).
+  // profFiltro (opcional) = nome da professora ("Amanda"/"Nathalia"/"Lilian") — quando informado,
+  // conta só matrículas/renovações/cancelamentos dos alunos dessa professora.
   var pfx=anoMes+"-";
   var primeiros=_primeiroEventoPorAluno();
   // "Novas" só conta um evento "matricula" se ele for REALMENTE o primeiro evento desse aluno.
   // Isso evita que uma renovação seja contabilizada como matrícula nova (ex: quando o histórico
   // precisou ser reconstruído e criou um registro de apoio).
   var novasLista=(D.historico||[]).filter(function(h){
-    return h.evento==="matricula"&&h.dataEvento&&h.dataEvento.startsWith(pfx)&&primeiros[h.nome]===h;
+    return h.evento==="matricula"&&h.dataEvento&&h.dataEvento.startsWith(pfx)&&primeiros[h.nome]===h&&(!profFiltro||h.prof===profFiltro);
   });
-  var renovadasLista=(D.historico||[]).filter(function(h){return h.evento==="renovacao"&&h.dataEvento&&h.dataEvento.startsWith(pfx);});
+  var renovadasLista=(D.historico||[]).filter(function(h){return h.evento==="renovacao"&&h.dataEvento&&h.dataEvento.startsWith(pfx)&&(!profFiltro||h.prof===profFiltro);});
   // Cancelamentos: usa D.canc como fonte principal (é a mesma fonte que mostra "Cancelado em" nas telas),
   // já que o histórico pode não ter o evento registrado em casos antigos. Enriquecido com dados do
   // histórico/matrícula quando disponíveis, para trazer plano e valor no relatório.
@@ -33565,9 +33567,9 @@ function _movimentacoesMes(anoMes){
   var canceladasLista=canceladasCanc.map(function(c){
     var histCanc=(D.historico||[]).find(function(h){return h.nome===c.nome&&h.evento==="cancelado"&&h.dataEvento===c.data;});
     var d=getDados(c.nome);
-    return {nome:c.nome,plano:(histCanc&&histCanc.plano)||(d&&d.plano)||"",valor:(histCanc&&histCanc.valor)||(d&&d.valor)||0,dataEvento:c.data};
-  });
-  var ativasLista=ativosNoMes(anoMes);
+    return {nome:c.nome,plano:(histCanc&&histCanc.plano)||(d&&d.plano)||"",valor:(histCanc&&histCanc.valor)||(d&&d.valor)||0,dataEvento:c.data,prof:(histCanc&&histCanc.prof)||(d&&d.prof)||""};
+  }).filter(function(c){return !profFiltro||c.prof===profFiltro;});
+  var ativasLista=ativosNoMes(anoMes).filter(function(a){return !profFiltro||a.prof===profFiltro;});
   return {novas:novasLista.length,renovadas:renovadasLista.length,canceladas:canceladasLista.length,ativas:ativasLista.length,
     novasLista:novasLista,renovadasLista:renovadasLista,canceladasLista:canceladasLista,ativasLista:ativasLista};
 }
@@ -34157,7 +34159,7 @@ function loginHtml(){
     +"<div id='la'></div>"
     +"<div class='fi' style='margin-bottom:12px'><label>Usu\u00e1rio</label>"
     +"<select id='lu' style='font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;width:100%;margin-top:4px'>"
-    +"<option value=''>Selecione.</option><option value='Catarina'>Catarina</option><option value='Secretaria'>Secretaria</option><option value='Professora Amanda'>Professora Amanda</option>"
+    +"<option value=''>Selecione.</option><option value='Catarina'>Catarina</option><option value='Secretaria'>Secretaria</option><option value='Professora Amanda'>Professora Amanda</option><option value='Professora Lilian'>Professora Lilian</option>"
     +"</select></div>"
     +"<div class='fi' style='margin-bottom:16px'><label>Senha</label>"
     +"<input type='password' id='ls' onkeydown=\"if(event.key==='Enter')doLogin2()\" style='font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;width:100%;margin-top:4px'>"
@@ -34169,7 +34171,7 @@ async function doLogin2(){
   var u=document.getElementById("lu").value,s=document.getElementById("ls").value,el=document.getElementById("la");
   if(!u){el.innerHTML="<div style='background:#FADBD8;color:#C0392B;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:12px'>Selecione o usu\u00e1rio.</div>";return;}
   if((await sha256hex(s))!==SENHAS_HASH[u]){el.innerHTML="<div style='background:#FADBD8;color:#C0392B;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:12px'>Senha incorreta.</div>";return;}
-  user={name:u,role:u==="Catarina"?"Gestora":u==="Professora Amanda"?"Professora":"Secretaria"};
+  user={name:u,role:(u==="Catarina")?"Gestora":(u==="Professora Amanda"||u==="Professora Lilian")?"Professora":"Secretaria"};
   tab="painel";render();syncAll().then(function(){render();attachAll();});
 }
 var NAV=[
@@ -34369,7 +34371,7 @@ function resumoProfessoraMesCardHtml(){
   var aulasDadas=(D.agenda||[]).filter(function(a){
     return a.professora===profNome&&a.presenca==="presenca"&&a.data&&a.data.startsWith(pfx)&&a.tipo!=="alerta_contrato";
   }).length;
-  var mov=_movimentacoesMes(pfx);
+  var mov=_movimentacoesMes(pfx,profNome);
   return "<div class='card painel-card-pro' style='margin-bottom:16px'>"
     +"<p class='painel-section-label'>Este mês</p>"
     +"<div class='ct' style='margin-bottom:10px'><i class='ti ti-chart-bar'></i> Meu resumo</div>"
@@ -34418,7 +34420,7 @@ function mensagemDoDiaEditorHtml(){
   var atual=msg?msg.texto:"";
   return "<div class='card' style='margin-bottom:16px'>"
     +"<p class='ct' style='margin-bottom:2px'><i class='ti ti-quote'></i> Mensagem motivadora do dia</p>"
-    +"<p style='font-size:11px;color:var(--mt);margin:0 0 10px'>Aparece pra Secretaria e pra Professora Amanda hoje.</p>"
+    +"<p style='font-size:11px;color:var(--mt);margin:0 0 10px'>Aparece pra Secretaria e pras Professoras (Amanda e Lilian) hoje.</p>"
     +"<textarea id='msgDiaInput' rows='2' placeholder='Escreva uma mensagem pro time...' style='font-size:13px;padding:10px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx);resize:vertical'>"+prEsc(atual)+"</textarea>"
     +"<button class='btn bp' style='margin-top:10px' onclick='salvarMensagemDia()'><i class='ti ti-check'></i> Salvar mensagem</button>"
     +"</div>";
@@ -34624,7 +34626,7 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
   var saudacao=horaAgora<12?"Bom dia":horaAgora<18?"Boa tarde":"Boa noite";
   var diasSemanaNomes=["Domingo","Segunda-feira","Terça-feira","Quarta-feira","Quinta-feira","Sexta-feira","Sábado"];
   var dataFormatadaHero=diasSemanaNomes[dataAgora.getDay()]+", "+dataAgora.getDate()+" de "+mesesNomes[dataAgora.getMonth()+1]+" de "+anoAtual;
-  var primeiroNomeSaudacao=user.name==="Professora Amanda"?"Amanda":(user.name==="Secretaria"?"Nicoli":user.name.split(" ")[0]);
+  var primeiroNomeSaudacao=user.role==="Professora"?((user.name||"").replace("Professora ","").trim()||"Amanda"):(user.name==="Secretaria"?"Nicoli":user.name.split(" ")[0]);
   var heroSimplesHtml="<div class='painel-hero'><div class='painel-hero-row'>"
     +"<div><p class='painel-hero-eyebrow'>"+dataFormatadaHero+"</p>"
     +"<p class='painel-hero-title'>"+saudacao+", "+primeiroNomeSaudacao+"</p>"
@@ -34651,6 +34653,7 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
     return heroSimplesHtml
       +aniversarioBannerHtml()+mensagemDoDiaHtml()
       +evolucoesPendentesCardHtml(profNomeAmanda)
+      +(profNomeAmanda==="Amanda"?evolucoesPendentesCardHtml("Lilian",true):"")
       +"<div class='painel-2col'>"
       +"<div>"+agendaHojeCardHtml(profNomeAmanda)+feedbacksDoMesCardHtml()+"</div>"
       +"<div>"+resumoProfessoraMesCardHtml()+semAutorizacaoImagemCardHtml()+"</div>"
@@ -34988,12 +34991,18 @@ function pagHtml(){
 }
 
 // ===== TABELA DE PREÇOS (Mensalidades) — Catarina e Secretária =====
-var PRECOS_FREQS=[
-  {key:"1x",label:"1X POR SEMANA",curto:"1x por semana"},
-  {key:"2x",label:"2X POR SEMANA",curto:"2x por semana"},
-  {key:"3x",label:"3X POR SEMANA",curto:"3x por semana"},
-  {key:"4x",label:"4X POR SEMANA",curto:"4x por semana"},
-  {key:"5x",label:"5X POR SEMANA",curto:"5x por semana"}
+var PRECOS_MODALIDADES=[
+  {key:"ginastica",label:"Gin\u00e1stica",cor:"#2E8FB3",icon:"ti-run",freqs:[
+    {key:"1x",curto:"1x por semana"},
+    {key:"2x",curto:"2x por semana"},
+    {key:"3x",curto:"3x por semana"},
+    {key:"4x",curto:"4x por semana"},
+    {key:"5x",curto:"5x por semana"}
+  ]},
+  {key:"karate",label:"Karat\u00ea",cor:"#5E35B1",icon:"ti-shield",freqs:[
+    {key:"1x",curto:"1x por semana"},
+    {key:"2x",curto:"2x por semana"}
+  ]}
 ];
 var PRECOS_PLANOS=[
   {key:"mensal",label:"Mensal"},
@@ -35003,10 +35012,12 @@ var PRECOS_PLANOS=[
 ];
 var PRECOS_HEADERS=(function(){
   var h=[];
-  PRECOS_FREQS.forEach(function(f){
-    PRECOS_PLANOS.forEach(function(p){
-      h.push(f.key+"_"+p.key+"_original");
-      h.push(f.key+"_"+p.key+"_promo");
+  PRECOS_MODALIDADES.forEach(function(m){
+    m.freqs.forEach(function(f){
+      PRECOS_PLANOS.forEach(function(p){
+        h.push(m.key+"_"+f.key+"_"+p.key+"_original");
+        h.push(m.key+"_"+f.key+"_"+p.key+"_promo");
+      });
     });
   });
   return h;
@@ -35032,7 +35043,12 @@ async function salvarPrecos(){
 }
 function _precoVal(k){
   var d=(D.precos&&D.precos[0])?D.precos[0]:{};
-  return d[k]||"";
+  if(d[k])return d[k];
+  // Migração: antes de existir Karatê, as chaves eram só freq_plano_sufixo (sem modalidade).
+  // Esses valores antigos eram todos de Ginástica — tratamos como tal se ainda não migrados.
+  var legacyKey=k.replace(/^ginastica_/,"");
+  if(legacyKey!==k&&d[legacyKey])return d[legacyKey];
+  return "";
 }
 function _descontoInfo(keyO,keyP){
   var o=parseFloat(String(_precoVal(keyO)).replace(",","."))||0;
@@ -35051,10 +35067,11 @@ function precosMostrarPlano(key){
     if(aba)aba.classList.toggle("active",p.key===key);
   });
 }
-function precosCalcDesconto(freqKey,planoKey){
-  var keyO=freqKey+"_"+planoKey+"_original",keyP=freqKey+"_"+planoKey+"_promo";
+function precosCalcDesconto(modKey,freqKey,planoKey){
+  var pref=modKey+"_"+freqKey+"_"+planoKey;
+  var keyO=pref+"_original",keyP=pref+"_promo";
   var elO=document.getElementById("pc_"+keyO),elP=document.getElementById("pc_"+keyP);
-  var elD=document.getElementById("precos-desc-"+freqKey+"_"+planoKey);
+  var elD=document.getElementById("precos-desc-"+pref);
   if(!elD)return;
   var o=parseFloat((elO?elO.value:"").replace(",","."))||0;
   var pr=parseFloat((elP?elP.value:"").replace(",","."))||0;
@@ -35063,6 +35080,30 @@ function precosCalcDesconto(freqKey,planoKey){
   if(dif>0.01)elD.innerHTML="<span style='color:#2E7D32;font-weight:700'>-"+dif.toFixed(0)+"%</span>";
   else if(dif<-0.01)elD.innerHTML="<span style='color:#D32F2F;font-weight:700'><i class='ti ti-alert-triangle'></i> promo maior</span>";
   else elD.innerHTML="<span style='color:var(--mt)'>igual</span>";
+}
+function _precosBlocoHtml(m,p){
+  var h="<div style='margin-bottom:18px'>";
+  h+="<p style='font-size:12px;font-weight:800;color:"+m.cor+";text-transform:uppercase;letter-spacing:.04em;margin:0 0 10px;display:flex;align-items:center;gap:6px'><i class='ti "+m.icon+"'></i> "+m.label+"</p>";
+  h+="<div class='ox'><table><thead><tr>"
+    +"<th>Frequência</th>"
+    +"<th style='color:#5E35B1'><i class='ti ti-file-invoice'></i> Valor Original</th>"
+    +"<th style='color:#2E8FB3'><i class='ti ti-discount-2'></i> Valor Promocional</th>"
+    +"<th>Desconto</th>"
+    +"</tr></thead><tbody>";
+  m.freqs.forEach(function(f){
+    var pref=m.key+"_"+f.key+"_"+p.key;
+    var keyO=pref+"_original",keyP=pref+"_promo";
+    h+="<tr>"
+      +"<td style='font-weight:700;white-space:nowrap'>"+f.curto+"</td>"
+      +"<td><div style='position:relative;min-width:110px'><span style='position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--mt)'>R$</span>"
+      +"<input type='text' inputmode='decimal' id='pc_"+keyO+"' value='"+_precoVal(keyO)+"' placeholder='0,00' oninput=\"precosCalcDesconto('"+m.key+"','"+f.key+"','"+p.key+"')\" style='width:100%;font-size:13px;padding:8px 8px 8px 30px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'></div></td>"
+      +"<td><div style='position:relative;min-width:110px'><span style='position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--mt)'>R$</span>"
+      +"<input type='text' inputmode='decimal' id='pc_"+keyP+"' value='"+_precoVal(keyP)+"' placeholder='0,00' oninput=\"precosCalcDesconto('"+m.key+"','"+f.key+"','"+p.key+"')\" style='width:100%;font-size:13px;padding:8px 8px 8px 30px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'></div></td>"
+      +"<td id='precos-desc-"+pref+"' style='font-size:12px;white-space:nowrap'>"+_descontoInfo(keyO,keyP)+"</td>"
+      +"</tr>";
+  });
+  h+="</tbody></table></div></div>";
+  return h;
 }
 function precosHtml(){
   if(!D.precos)D.precos=[];
@@ -35074,27 +35115,12 @@ function precosHtml(){
   });
   html+="</div>";
   PRECOS_PLANOS.forEach(function(p,i){
-    html+="<div id='precos-painel-"+p.key+"' class='card' style='margin-bottom:16px;"+(i===0?"":"display:none")+"'>";
+    html+="<div id='precos-painel-"+p.key+"' style='"+(i===0?"":"display:none")+"'>";
+    html+="<div class='card' style='margin-bottom:16px'>";
     html+="<p class='ct' style='margin-bottom:4px'><i class='ti ti-tag'></i> Plano "+p.label+"</p>";
-    html+="<p style='font-size:11px;color:var(--mt);margin:0 0 14px'>Valor por frequência semanal de aulas.</p>";
-    html+="<div class='ox'><table><thead><tr>"
-      +"<th>Frequência</th>"
-      +"<th style='color:#5E35B1'><i class='ti ti-file-invoice'></i> Valor Original</th>"
-      +"<th style='color:#2E8FB3'><i class='ti ti-discount-2'></i> Valor Promocional</th>"
-      +"<th>Desconto</th>"
-      +"</tr></thead><tbody>";
-    PRECOS_FREQS.forEach(function(f){
-      var keyO=f.key+"_"+p.key+"_original",keyP=f.key+"_"+p.key+"_promo";
-      html+="<tr>"
-        +"<td style='font-weight:700;white-space:nowrap'>"+f.curto+"</td>"
-        +"<td><div style='position:relative;min-width:110px'><span style='position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--mt)'>R$</span>"
-        +"<input type='text' inputmode='decimal' id='pc_"+keyO+"' value='"+_precoVal(keyO)+"' placeholder='0,00' oninput=\"precosCalcDesconto('"+f.key+"','"+p.key+"')\" style='width:100%;font-size:13px;padding:8px 8px 8px 30px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'></div></td>"
-        +"<td><div style='position:relative;min-width:110px'><span style='position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--mt)'>R$</span>"
-        +"<input type='text' inputmode='decimal' id='pc_"+keyP+"' value='"+_precoVal(keyP)+"' placeholder='0,00' oninput=\"precosCalcDesconto('"+f.key+"','"+p.key+"')\" style='width:100%;font-size:13px;padding:8px 8px 8px 30px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'></div></td>"
-        +"<td id='precos-desc-"+f.key+"_"+p.key+"' style='font-size:12px;white-space:nowrap'>"+_descontoInfo(keyO,keyP)+"</td>"
-        +"</tr>";
-    });
-    html+="</tbody></table></div></div>";
+    html+="<p style='font-size:11px;color:var(--mt);margin:0 0 14px'>Valor por modalidade e frequência semanal de aulas.</p>";
+    PRECOS_MODALIDADES.forEach(function(m){html+=_precosBlocoHtml(m,p);});
+    html+="</div></div>";
   });
   html+="<button class='btn bp bf' onclick='salvarPrecos()'><i class='ti ti-check'></i> Salvar tabela de preços</button>";
   html+="<div id='precos-msg' style='margin-top:10px'></div>";
@@ -35232,6 +35258,10 @@ async function savePag(){
 }
 
 // ===== MATRICULAS =====
+function _modalidadeInfo(prof){
+  if(prof==="Lilian")return{nome:"Karat\u00ea",cor:"#5E35B1",bg:"#F3E5F5"};
+  return{nome:"Gin\u00e1stica",cor:"#2E8FB3",bg:"#E8F4F8"};
+}
 function matHtml(){
   var dOpts=DIAS.map(function(d){return "<option>"+d+"</option>";}).join("");
   var hOpts=HORAS.map(function(h){return "<option>"+h+"</option>";}).join("");
@@ -35246,7 +35276,8 @@ function matHtml(){
     var nomeCurto=a.nome.split(" ").slice(0,2).join(" ");
     // Para novos, buscar data de matrícula e canal
     var matData=isNovo?(D.mat.find(function(m){return m.nome===a.nome;})||{}):{};
-    return "<tr><td style='font-weight:600;cursor:pointer;color:var(--brand2)' onclick=\"editarMatricula('"+a.nome.replace(/'/g,"\\'")+"')\">"+nomeCurto
+    var mi=_modalidadeInfo(a.prof);
+    return "<tr><td style='font-weight:600;cursor:pointer;color:var(--brand2)' onclick=\"editarMatricula('"+a.nome.replace(/'/g,"\\'")+"')\"><span title='"+mi.nome+" \u2014 Prof. "+(a.prof||"?")+"' style='display:inline-block;width:9px;height:9px;border-radius:50%;background:"+mi.cor+";margin-right:7px;flex-shrink:0'></span>"+nomeCurto
       +(isNovo?"&nbsp;<span class='badge btl' style='font-size:10px'>Novo</span>":"")
       +"</td><td>"+(a.numero||"&#8212;")+"</td>"
       +(isNovo?"<td style='font-size:11px'>"+fd(matData.data||"")+"</td>":"<td style='font-size:11px;color:var(--mt)'>Fixo</td>")
@@ -35282,13 +35313,18 @@ function matHtml(){
     +"<div class='fi' style='margin-bottom:10px;background:var(--al);padding:10px;border-radius:8px'><label style='display:flex;align-items:center;gap:8px;cursor:pointer'><input type='checkbox' id='mbols' style='width:auto'> Aluno bolsista <span style='font-weight:400;color:var(--mt)'>(não gera cobrança, contrato ou vencimento — não entra nas estatísticas financeiras)</span></label></div>"
     +"<button class='btn bp bf' onclick='saveMat()'><i class='ti ti-check'></i> Registrar matr\u00edcula</button></div>"
     +"<div class='card'><p class='ct'><i class='ti ti-users'></i> Alunos ativos ("+todos.length+") <span style='font-size:11px;color:var(--mt);font-weight:400'>— clique no nome para editar &middot; <span style='color:var(--tl)'>Novo</span> = matriculado este ciclo</span></p>"
+    +"<p style='font-size:11px;color:var(--mt);margin:0 0 12px;display:flex;gap:14px;flex-wrap:wrap'>"
+    +"<span><span style='display:inline-block;width:9px;height:9px;border-radius:50%;background:#2E8FB3;margin-right:5px'></span>Gin\u00e1stica (Amanda/Nathalia)</span>"
+    +"<span><span style='display:inline-block;width:9px;height:9px;border-radius:50%;background:#5E35B1;margin-right:5px'></span>Karat\u00ea (Lilian)</span>"
+    +"</p>"
     +"<div class='ox'><table><thead><tr><th>Nome</th><th>Matr\u00edcula</th><th>Data mat.</th><th>Plano</th><th>Valor</th><th>Venc.</th><th>Canal</th><th>A\u00e7\u00f5es</th></tr></thead><tbody>"+rowsTodos+"</tbody></table></div></div>"
     +(todosBols.length>0?"<div class='card'><p class='ct' style='color:var(--pu)'><i class='ti ti-award'></i> Alunos bolsistas ("+todosBols.length+") <span style='font-size:11px;color:var(--mt);font-weight:400'>— sem cobrança, contrato ou vencimento &middot; não contam nas estatísticas financeiras</span></p>"
     +"<div class='ox'><table><thead><tr><th>Nome</th><th>Dias/Hor\u00e1rio</th><th>Professora</th><th>Matr\u00edcula</th><th>A\u00e7\u00f5es</th></tr></thead><tbody>"
     +todosBols.map(function(a){
-      return "<tr><td style='font-weight:600;cursor:pointer;color:var(--brand2)' onclick=\"editarMatricula('"+a.nome.replace(/'/g,"\\'")+"')\">"+a.nome.split(" ").slice(0,2).join(" ")+"&nbsp;<span class='badge bpu' style='font-size:10px'>Bolsista</span></td>"
+      var mi=_modalidadeInfo(a.prof);
+      return "<tr><td style='font-weight:600;cursor:pointer;color:var(--brand2)' onclick=\"editarMatricula('"+a.nome.replace(/'/g,"\\'")+"')\"><span title='"+mi.nome+"' style='display:inline-block;width:9px;height:9px;border-radius:50%;background:"+mi.cor+";margin-right:7px'></span>"+a.nome.split(" ").slice(0,2).join(" ")+"&nbsp;<span class='badge bpu' style='font-size:10px'>Bolsista</span></td>"
         +"<td style='font-size:12px'>"+(a.diasSem||"—")+" &middot; "+(a.horario||"—")+"</td>"
-        +"<td style='font-size:12px'>"+(a.prof||"—")+"</td>"
+        +"<td style='font-size:12px'><span class='badge' style='background:"+mi.bg+";color:"+mi.cor+"'>"+(a.prof||"—")+"</span></td>"
         +"<td style='font-size:11px'>"+fd(a.dataMatricula)+"</td>"
         +"<td style='display:flex;gap:4px'>"
         +"<button class='btn bsm' style='background:var(--al);color:var(--am);border-color:var(--al)' data-n='"+a.nome+"' onclick='cancelarAluno(this.dataset.n,false)'><i class='ti ti-x'></i> Cancelar</button>"
@@ -35492,7 +35528,7 @@ function feedbackProfCardHtml(){
     +"<div class='fi' style='max-width:340px;margin-bottom:4px'><label>Buscar aluno</label>"
     +"<select onchange='setFeedbackProfAluno(this.value)'><option value=''>Selecione...</option>"+opts+"</select></div>";
   if(feedbackProfAlunoSel){
-    var recs=(D.pront||[]).filter(function(r){return r.aluno===feedbackProfAlunoSel&&r.tipo==="feedback";}).sort(function(a,b){return String(b.data).localeCompare(String(a.data));});
+    var recs=(D.pront||[]).filter(function(r){return r.aluno===feedbackProfAlunoSel&&r.tipo==="feedback"&&_prontVisivel(r);}).sort(function(a,b){return String(b.data).localeCompare(String(a.data));});
     html+="<div style='margin-top:12px'>";
     if(recs.length===0){
       html+="<p class='empty'>Nenhum feedback registrado para este aluno ainda.</p>";
@@ -39637,6 +39673,16 @@ function prontAlunosLista(){
   cancelados().forEach(function(a){l.push({nome:a.nome,st:"Cancelado"});});
   return l;
 }
+// Registros de prontuário preenchidos pela Amanda ficam restritos só a ela (e à Catarina/Secretaria);
+// outras professoras (ex: Lilian) não têm acesso a esse conteúdo específico — o resto do sistema
+// continua com acesso total. Registros antigos (sem "autor" salvo) eram todos dela.
+function _prontVisivel(r){
+  if(!user||user.role!=="Professora")return true;
+  var meuNome=(user.name||"").replace("Professora ","").trim();
+  if(meuNome==="Amanda")return true;
+  var autor=r.autor||"Amanda";
+  return autor!=="Amanda";
+}
 var prontAluno="",prontSub="evolucoes",prontEdit=null;
 var prontFicha="motora"; // qual ficha de avaliação está selecionada: "motora" ou "fisio"
 var prontPendData=""; // data de aula pendente de evolução, preenchida ao vir do atalho do painel
@@ -39668,26 +39714,28 @@ function agendaPendenciasEvolucao(profNome){
   return pend;
 }
 // Card do painel da Professora com as evoluções pendentes.
-function evolucoesPendentesCardHtml(profNome){
+function evolucoesPendentesCardHtml(profNome,outroProf){
   var pend=agendaPendenciasEvolucao(profNome);
+  var titulo=outroProf?("Evoluções pendentes \u2014 "+profNome):"Evoluções pendentes";
   if(pend.length===0){
     return "<div class='card' style='margin-bottom:16px;border-left:4px solid #2E7D32;background:#E8F5E9'>"
-      +"<p class='ct' style='margin-bottom:2px'><i class='ti ti-circle-check'></i> Evoluções em dia</p>"
-      +"<p style='font-size:12px;color:var(--mt);margin:0'>Nenhuma evolução pendente desde "+fd(EVOLUCAO_INICIO)+".</p></div>";
+      +"<p class='ct' style='margin-bottom:2px'><i class='ti ti-circle-check'></i> "+(outroProf?profNome+" est\u00e1 em dia":"Evoluções em dia")+"</p>"
+      +"<p style='font-size:12px;color:var(--mt);margin:0'>Nenhuma evolução pendente"+(outroProf?" de "+profNome:"")+" desde "+fd(EVOLUCAO_INICIO)+".</p></div>";
   }
   var hoje=fdISO(new Date());
   var html="<div class='card' style='margin-bottom:16px;border-left:4px solid #D32F2F;background:#FFEBEE'>";
-  html+="<p class='ct' style='margin-bottom:2px'><i class='ti ti-alert-triangle'></i> Evoluções pendentes<span class='badge br2' style='margin-left:8px'>"+pend.length+"</span></p>";
-  html+="<p style='font-size:11px;color:var(--mt);margin:0 0 10px'>Aulas já dadas sem evolução registrada — inclusive faltas, que também precisam ser preenchidas.</p>";
+  html+="<p class='ct' style='margin-bottom:2px'><i class='ti ti-alert-triangle'></i> "+titulo+"<span class='badge br2' style='margin-left:8px'>"+pend.length+"</span></p>";
+  html+="<p style='font-size:11px;color:var(--mt);margin:0 0 10px'>"+(outroProf?"Aulas de "+profNome+" já dadas sem evolução registrada — inclusive faltas.":"Aulas já dadas sem evolução registrada — inclusive faltas, que também precisam ser preenchidas.")+"</p>";
   html+="<div>"+pend.map(function(a){
     var atrasado=a.data<hoje;
     var faltou=a.presenca==="falta";
     var nomeReal=_alunoBase(a.aluno);
     var tagData=a.data===hoje?"<span class='badge bam' style='margin-left:6px'>Hoje</span>":(atrasado?"<span class='badge br2' style='margin-left:6px'>Atrasada</span>":"");
     var tagFalta=faltou?"<span class='badge' style='margin-left:6px;background:#9E9E9E;color:#fff'>Faltou</span>":"";
-    return "<div class='timeline-item tl-red' style='cursor:pointer' onclick='irParaEvolucaoPendente(\""+nomeReal.replace(/"/g,"&quot;")+"\",\""+a.data+"\")'>"
+    var clickAttr=outroProf?"":" style='cursor:pointer' onclick='irParaEvolucaoPendente(\""+nomeReal.replace(/"/g,"&quot;")+"\",\""+a.data+"\")'";
+    return "<div class='timeline-item tl-red'"+clickAttr+">"
       +"<p style='font-weight:700;font-size:12px;margin:0;display:flex;align-items:center;flex-wrap:wrap'>"+fd(a.data)+" &middot; "+nomeReal+tagData+tagFalta+"</p>"
-      +"<p style='font-size:11px;color:var(--brand2);margin:2px 0 0'><i class='ti ti-pencil'></i> Toque para preencher a evolução</p>"
+      +(outroProf?"":"<p style='font-size:11px;color:var(--brand2);margin:2px 0 0'><i class='ti ti-pencil'></i> Toque para preencher a evolução</p>")
       +"</div>";
   }).join("")+"</div></div>";
   return html;
@@ -39926,7 +39974,7 @@ function renderProntuarioLeituraModal(){
     document.getElementById("mc").innerHTML=html;
     return;
   }
-  var recs=(D.pront||[]).filter(function(r){return r.aluno===nome&&r.tipo===prontLeituraSub;}).sort(function(a,b){return String(b.data).localeCompare(String(a.data));});
+  var recs=(D.pront||[]).filter(function(r){return r.aluno===nome&&r.tipo===prontLeituraSub&&_prontVisivel(r);}).sort(function(a,b){return String(b.data).localeCompare(String(a.data));});
   html+="<div class='card'><p class='ct'><i class='ti ti-list'></i> Registros ("+recs.length+")</p>";
   if(recs.length===0)html+="<p class='empty'>Nenhum registro ainda.</p>";
   recs.forEach(function(r){
@@ -39938,10 +39986,10 @@ function renderProntuarioLeituraModal(){
 
 function prDados(r){try{if(!r.dados)return{};return typeof r.dados==="string"?JSON.parse(r.dados):r.dados;}catch(e){return{};}}
 async function _saveProntNow(){
-  var h=["id","aluno","tipo","data","dados","criadoEm"];
+  var h=["id","aluno","tipo","data","dados","criadoEm","autor"];
   var rows=(D.pront||[]).map(function(p){
     var dd=typeof p.dados==="string"?p.dados:JSON.stringify(p.dados||{});
-    return [String(p.id||""),String(p.aluno||""),String(p.tipo||""),String(p.data||""),dd,String(p.criadoEm||"")];
+    return [String(p.id||""),String(p.aluno||""),String(p.tipo||""),String(p.data||""),dd,String(p.criadoEm||""),String(p.autor||"")];
   });
   return await rewriteAba("prontuario",h,rows);
 }
@@ -40066,7 +40114,7 @@ function prontuarioHtml(){
   html+=perfilDadosBasicosResumo(prontAluno);
   var d=prontEdit?prDados(prontEdit):{};
   var ed=!!prontEdit;
-  var recs=(D.pront||[]).filter(function(r){return r.aluno===prontAluno&&r.tipo===prontSub;}).sort(function(a,b){return String(b.data).localeCompare(String(a.data));});
+  var recs=(D.pront||[]).filter(function(r){return r.aluno===prontAluno&&r.tipo===prontSub&&_prontVisivel(r);}).sort(function(a,b){return String(b.data).localeCompare(String(a.data));});
 
   if(prontSub==="evolucoes"){
     if(!ed&&prontPendData){
@@ -40370,7 +40418,8 @@ async function salvarPront(){
     var reg=(D.pront||[]).find(function(x){return x.id===prontEdit.id;});
     if(reg){reg.data=data;reg.dados=JSON.stringify(dados);}
   }else{
-    D.pront.push({id:_novoId("pr"),aluno:prontAluno,tipo:prontSub,data:data,dados:JSON.stringify(dados),criadoEm:fdISO(new Date())});
+    var autor=user.role==="Professora"?((user.name||"").replace("Professora ","").trim()||"Amanda"):(user.role==="Gestora"?"Catarina":"Secretaria");
+    D.pront.push({id:_novoId("pr"),aluno:prontAluno,tipo:prontSub,data:data,dados:JSON.stringify(dados),criadoEm:fdISO(new Date()),autor:autor});
   }
   var ok=await _saveProntNow();
   if(ok){prontEdit=null;prontFicha="motora";prontPendData="";refreshContent();}
@@ -40444,7 +40493,7 @@ function relatoriosPedagogicosHtml(){
     return html;
   }
   // ---- avaliacoes ----
-  var avRecs=(D.pront||[]).filter(function(r){return r.aluno===rpAluno&&r.tipo==="avaliacoes";}).sort(function(a,b){return String(b.data).localeCompare(String(a.data));});
+  var avRecs=(D.pront||[]).filter(function(r){return r.aluno===rpAluno&&r.tipo==="avaliacoes"&&_prontVisivel(r);}).sort(function(a,b){return String(b.data).localeCompare(String(a.data));});
   html+="<div class='fi'><label>Escolha</label><select id='rp-avmodo' onchange='rpAvModo=this.value;refreshContent()' style='font-size:13px;padding:9px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'>";
   html+="<option value='uma'"+(rpAvModo==="uma"?" selected":"")+">Uma avaliação específica</option><option value='todas'"+(rpAvModo==="todas"?" selected":"")+">Todas as avaliações</option></select></div>";
   if(rpAvModo==="uma"){
@@ -40541,7 +40590,7 @@ function pdfBadge(tipo,label){
 }
 // ---- Relatório: Evolução + Plano + Feedback ----
 function relEvolucaoFiltra(aluno){
-  var recs=(D.pront||[]).filter(function(r){return r.aluno===aluno&&(r.tipo==="evolucoes"||r.tipo==="plano"||r.tipo==="feedback");});
+  var recs=(D.pront||[]).filter(function(r){return r.aluno===aluno&&(r.tipo==="evolucoes"||r.tipo==="plano"||r.tipo==="feedback")&&_prontVisivel(r);});
   if(rpModo==="periodo"){
     recs=recs.filter(function(r){
       if(rpIni&&String(r.data)<rpIni)return false;
@@ -40603,7 +40652,7 @@ function gerarPDFEvolucao(){
 }
 // ---- Relatório: Avaliações ----
 function relAvaliacoesFiltra(aluno){
-  var recs=(D.pront||[]).filter(function(r){return r.aluno===aluno&&r.tipo==="avaliacoes";});
+  var recs=(D.pront||[]).filter(function(r){return r.aluno===aluno&&r.tipo==="avaliacoes"&&_prontVisivel(r);});
   if(rpAvModo==="uma"){
     recs=recs.filter(function(r){return r.id===rpAvData;});
   }
