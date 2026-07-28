@@ -79,6 +79,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 .timeline-item.tl-red{border-left-color:#FFCDD2}.timeline-item.tl-red:before{background:var(--rd)}
 .timeline-item.tl-blue{border-left-color:#B2DFDB}.timeline-item.tl-blue:before{background:var(--tl)}
 .timeline-item.tl-teal{border-left-color:var(--tll)}.timeline-item.tl-teal:before{background:var(--brand2)}
+.timeline-item.tl-purple{border-left-color:#D1C4E9}.timeline-item.tl-purple:before{background:#5E35B1}
 .timeline-item:last-child{border-left-color:transparent}
 .kpi{background:var(--b1);border:1px solid var(--br);border-radius:var(--r);padding:16px 18px;position:relative;overflow:hidden;box-shadow:0 3px 10px rgba(20,50,70,.05);transition:all .25s ease}
 .kpi:hover{box-shadow:0 8px 22px rgba(20,50,70,.09);transform:translateY(-2px)}
@@ -33512,6 +33513,41 @@ function todosObj(){
   return lista;
 }
 function ativos(){return todosObj().filter(function(a){return!eCanc(a.nome);});}
+// ===== SERVIÇOS ADICIONAIS (aluno matriculado em mais de uma modalidade) =====
+// Ex: aluno já matriculado na Ginástica (Amanda/Nathalia) que também passa a fazer Karatê (Lilian).
+// Fica registrado aqui — NÃO cria um novo aluno/matrícula, não conta como "matrícula nova" nas
+// estatísticas (isso já é garantido pois o histórico dele não é o primeiro evento) e, por enquanto,
+// não gera cobrança separada no caixa (só registro/agenda, combinado com a Catarina).
+var SERVEXTRA_H=["id","nome","prof","plano","valor","diasSem","horario","data","ativo"];
+function _servicosExtrasDoAluno(nome){
+  return (D.servicosExtras||[]).filter(function(e){return e.nome===nome&&(e.ativo===true||e.ativo==="true"||e.ativo===undefined);});
+}
+async function saveServicosExtras(){
+  var rows=(D.servicosExtras||[]).map(function(e){return SERVEXTRA_H.map(function(k){return String(e[k]===undefined||e[k]===null?"":e[k]);});});
+  return await rewriteAba("servicosextras",SERVEXTRA_H,rows);
+}
+async function adicionarServicoExtra(nome){
+  var prof=_prV("sv-prof"),plano=_prV("sv-plano"),valor=+_prV("sv-valor")||0,diasSem=_prV("sv-dias"),horario=_prV("sv-hora"),data=_prV("sv-data");
+  var msgEl=document.getElementById("sv-msg");
+  if(!prof||!data){if(msgEl)msgEl.innerHTML="<div class='al2 ali'><i class='ti ti-info-circle'></i> Selecione a professora e a data de matr\u00edcula do servi\u00e7o.</div>";return;}
+  if(!D.servicosExtras)D.servicosExtras=[];
+  var id=_novoId("sv");
+  D.servicosExtras.push({id:id,nome:nome,prof:prof,plano:plano,valor:valor,diasSem:diasSem,horario:horario,data:data,ativo:true});
+  if(!D.historico)D.historico=[];
+  D.historico.push({nome:nome,plano:plano,valor:valor,diaVenc:"",prof:prof,dataMatricula:data,dataRenovacao:"",vencimento:calcVencContrato(data,plano)||"",evento:"matricula",dataEvento:data});
+  var ok1=await saveServicosExtras();
+  var ok2=await saveHistoricoAll();
+  if(!ok1||!ok2){if(msgEl)msgEl.innerHTML="<div class='al2 ali'><i class='ti ti-alert-triangle'></i> Erro ao salvar. Verifique se a aba \"servicosextras\" existe na planilha.</div>";return;}
+  editarMatricula(nome);
+  setTimeout(function(){var m=document.getElementById("sv-msg");if(m)m.innerHTML="<div class='al2 als'><i class='ti ti-check'></i> Servi\u00e7o adicionado! J\u00e1 aparece no hist\u00f3rico dele.</div>";},60);
+}
+async function removerServicoExtra(id,nome){
+  if(!confirm("Remover este serviço adicional? (o histórico de matrícula dele é mantido)"))return;
+  D.servicosExtras=(D.servicosExtras||[]).filter(function(e){return e.id!==id;});
+  var ok=await saveServicosExtras();
+  if(!ok){alert("Erro ao salvar. Verifique se a aba \"servicosextras\" existe na planilha.");return;}
+  editarMatricula(nome);
+}
 // Retorna, para cada aluno, o evento mais antigo registrado no histórico (por data).
 // Isso representa a matrícula ORIGINAL de verdade, mesmo que o campo dataMatricula
 // do cadastro já tenha sido sobrescrito por uma renovação posterior.
@@ -34024,7 +34060,8 @@ async function syncAll(){
   "precos",
   "ponto",
   "salario",
-  "logs"
+  "logs",
+  "servExtras"
 ];
 
 var abas=[
@@ -34045,7 +34082,8 @@ var abas=[
   "tabelaprecos",
   "ponto",
   "salario",
-  "logs"
+  "logs",
+  "servicosextras"
 ];
   // ⚡ OTIMIZAÇÃO: Carregar TODAS as abas em paralelo com Promise.all() ao invés de sequencial
   var promises=abas.map(function(aba){return loadAba(aba);});
@@ -34650,12 +34688,15 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
     // feedbacks do mês, com o resumo mensal (aulas dadas / matrículas / cancelamentos / renovações)
     // e o alerta de uso de imagem numa coluna lateral compacta.
     var profNomeAmanda=(user.name||"").replace("Professora ","").trim()||"Amanda";
+    var vejoLilian=profNomeAmanda==="Amanda";
     return heroSimplesHtml
       +aniversarioBannerHtml()+mensagemDoDiaHtml()
       +evolucoesPendentesCardHtml(profNomeAmanda)
-      +(profNomeAmanda==="Amanda"?evolucoesPendentesCardHtml("Lilian",true):"")
       +"<div class='painel-2col'>"
-      +"<div>"+agendaHojeCardHtml(profNomeAmanda)+feedbacksDoMesCardHtml()+"</div>"
+      +"<div>"+agendaHojeCardHtml(profNomeAmanda)
+        +(vejoLilian?evolucoesPendentesCardHtml("Lilian",true):"")
+        +(vejoLilian?feedbacksDoMesCardHtml("Lilian",true):"")
+        +feedbacksDoMesCardHtml()+"</div>"
       +"<div>"+resumoProfessoraMesCardHtml()+semAutorizacaoImagemCardHtml()+"</div>"
       +"</div>";
   }
@@ -35277,7 +35318,8 @@ function matHtml(){
     // Para novos, buscar data de matrícula e canal
     var matData=isNovo?(D.mat.find(function(m){return m.nome===a.nome;})||{}):{};
     var mi=_modalidadeInfo(a.prof);
-    return "<tr><td style='font-weight:600;cursor:pointer;color:var(--brand2)' onclick=\"editarMatricula('"+a.nome.replace(/'/g,"\\'")+"')\"><span title='"+mi.nome+" \u2014 Prof. "+(a.prof||"?")+"' style='display:inline-block;width:9px;height:9px;border-radius:50%;background:"+mi.cor+";margin-right:7px;flex-shrink:0'></span>"+nomeCurto
+    var extrasDot=_servicosExtrasDoAluno(a.nome).map(function(e){var em=_modalidadeInfo(e.prof);return "<span title='Tamb\u00e9m faz "+em.nome+" \u2014 Prof. "+e.prof+"' style='display:inline-block;width:9px;height:9px;border-radius:50%;background:"+em.cor+";margin-right:4px;border:1px solid #fff'></span>";}).join("");
+    return "<tr><td style='font-weight:600;cursor:pointer;color:var(--brand2)' onclick=\"editarMatricula('"+a.nome.replace(/'/g,"\\'")+"')\"><span title='"+mi.nome+" \u2014 Prof. "+(a.prof||"?")+"' style='display:inline-block;width:9px;height:9px;border-radius:50%;background:"+mi.cor+";margin-right:7px;flex-shrink:0'></span>"+extrasDot+nomeCurto
       +(isNovo?"&nbsp;<span class='badge btl' style='font-size:10px'>Novo</span>":"")
       +"</td><td>"+(a.numero||"&#8212;")+"</td>"
       +(isNovo?"<td style='font-size:11px'>"+fd(matData.data||"")+"</td>":"<td style='font-size:11px;color:var(--mt)'>Fixo</td>")
@@ -35348,13 +35390,15 @@ function matHtml(){
 }
 // ===== FEEDBACKS (painel de acompanhamento +60 dias) =====
 var FEEDBACK_CICLO_DIAS=60;
-function _feedbackInfoAluno(a){
-  var fbs=(D.feedbacks||[]).filter(function(f){return f.aluno===a.nome;}).slice().sort(function(x,y){return x.data<y.data?-1:1;});
+// Calcula o ciclo de feedback de UM serviço específico (aluno+professora+data de matrícula
+// daquele serviço). profFiltro=null considera todos os feedbacks do aluno (comportamento
+// padrão de aluno com um único serviço); informado, considera só os feedbacks daquela professora
+// — é isso que permite um aluno matriculado em Ginástica E Karatê ter dois ciclos independentes.
+function _feedbackInfoServico(nome,dataBase,profFiltro){
+  var fbs=(D.feedbacks||[]).filter(function(f){return f.aluno===nome&&(!profFiltro||f.prof===profFiltro);}).slice().sort(function(x,y){return x.data<y.data?-1:1;});
   var qtd=fbs.length;
   var ultimo=qtd>0?fbs[qtd-1]:null;
-  // Regra: se já existe pelo menos 1 feedback, o ciclo de 60 dias conta a partir do ÚLTIMO envio.
-  // Se o aluno nunca recebeu feedback (matrícula recente ou antiga sem registro), conta a partir da data da matrícula.
-  var baseData=ultimo?ultimo.data:(a.dataMatricula||"");
+  var baseData=ultimo?ultimo.data:(dataBase||"");
   var proximo="";
   if(baseData){
     var dp=new Date(baseData+"T00:00:00");
@@ -35365,22 +35409,59 @@ function _feedbackInfoAluno(a){
   var diasRestantes=proximo?Math.round((new Date(proximo+"T00:00:00")-new Date(hoje+"T00:00:00"))/86400000):null;
   var status;
   if(diasRestantes===null)status="semenvio";
-  else if(diasRestantes<0)status=qtd===0?"atrasado":"atrasado";
+  else if(diasRestantes<0)status="atrasado";
   else if(diasRestantes<=7)status="embreve";
   else status=qtd===0?"semenvio":"emdia";
-  return {aluno:a,fbs:fbs,qtd:qtd,ultimo:ultimo,proximo:proximo,diasRestantes:diasRestantes,status:status};
+  return {fbs:fbs,qtd:qtd,ultimo:ultimo,proximo:proximo,diasRestantes:diasRestantes,status:status};
+}
+// Retorna 1 "linha" por serviço do aluno: se ele só tem a matrícula principal, uma linha só
+// (comportamento de sempre). Se tem um serviço adicional (ex: Karatê com a Lilian), retorna uma
+// linha PRA CADA serviço, cada uma com seu próprio ciclo de feedback e rótulo de modalidade.
+function _servicosFeedbackDoAluno(a){
+  var extras=_servicosExtrasDoAluno(a.nome);
+  function linha(prof,dataBase,label){
+    var r=_feedbackInfoServico(a.nome,dataBase,extras.length>0?prof:null);
+    r.aluno=a;r.prof=prof;r.label=label;
+    return r;
+  }
+  if(extras.length===0)return [linha(a.prof,a.dataMatricula,null)];
+  var linhas=[linha(a.prof,a.dataMatricula,_modalidadeInfo(a.prof).nome+" \u2014 "+a.prof)];
+  extras.forEach(function(e){linhas.push(linha(e.prof,e.data,_modalidadeInfo(e.prof).nome+" \u2014 "+e.prof));});
+  return linhas;
+}
+function _feedbackInfoAluno(a){
+  var r=_feedbackInfoServico(a.nome,a.dataMatricula,null);
+  r.aluno=a;
+  return r;
 }
 function setFeedbackAluno(v){feedbackAlunoSel=v;refreshContent();}
-function feedbacksDoMesCardHtml(){
+// outroProf=true => versão "supervisão" (usada no painel da Amanda pra acompanhar a Lilian):
+// mesma lista, mas com layout roxo/informativo, sem o botão "ver todos" (que é do módulo Feedbacks dela).
+function feedbacksDoMesCardHtml(profNome,outroProf){
   var hoje=new Date();
   var pfxMesReal=hoje.getFullYear()+"-"+String(hoje.getMonth()+1).padStart(2,"0");
-  var lista=ativos().map(_feedbackInfoAluno).filter(function(i){
+  var linhas=[];
+  ativos().forEach(function(a){
+    _servicosFeedbackDoAluno(a).forEach(function(s){
+      if(profNome&&s.prof!==profNome)return;
+      linhas.push(s);
+    });
+  });
+  var lista=linhas.filter(function(i){
     if(!i.proximo)return false;
     return i.proximo.slice(0,7)===pfxMesReal||i.status==="atrasado";
   });
   lista.sort(function(a,b){return a.proximo<b.proximo?-1:1;});
-  if(lista.length===0)return "";
-  var statusBadge={
+  if(lista.length===0){
+    if(outroProf)return "<div class='card' style='margin-bottom:16px;border-left:4px solid #5E35B1;background:#F3E5F5'><p class='ct' style='margin-bottom:2px'><i class='ti ti-circle-check'></i> Feedbacks de "+profNome+" em dia</p><p style='font-size:12px;color:var(--mt);margin:0'>Nenhum feedback pendente este mês.</p></div>";
+    return "";
+  }
+  var statusBadge=outroProf?{
+    atrasado:"<span class='badge' style='background:#E1D5F5;color:#5E35B1'><i class='ti ti-alert-circle'></i> Atrasado</span>",
+    embreve:"<span class='badge' style='background:#E1D5F5;color:#5E35B1'><i class='ti ti-clock'></i> Em breve</span>",
+    semenvio:"<span class='badge' style='background:#E1D5F5;color:#5E35B1'><i class='ti ti-message-circle-2'></i> Sem 1\u00ba envio</span>",
+    emdia:"<span class='badge' style='background:#E1D5F5;color:#5E35B1'><i class='ti ti-check'></i> Em dia</span>"
+  }:{
     atrasado:"<span class='badge br2'><i class='ti ti-alert-circle'></i> Atrasado</span>",
     embreve:"<span class='badge bam'><i class='ti ti-clock'></i> Em breve</span>",
     semenvio:"<span class='badge bpu'><i class='ti ti-message-circle-2'></i> Sem 1\u00ba envio</span>",
@@ -35389,14 +35470,14 @@ function feedbacksDoMesCardHtml(){
   var rows=lista.map(function(i){
     return "<div class='ci' style='grid-template-columns:100px 1fr 130px'>"
       +"<span style='font-weight:600'>"+fd(i.proximo)+"</span>"
-      +"<span>"+i.aluno.nome.split(" ").slice(0,2).join(" ")+"</span>"
+      +"<span>"+i.aluno.nome.split(" ").slice(0,2).join(" ")+(i.label?" <span style='font-size:9px;color:var(--mt);font-weight:400'>("+i.label+")</span>":"")+"</span>"
       +"<span>"+statusBadge[i.status]+"</span>"
       +"</div>";
   }).join("");
-  return "<div class='card' style='margin-bottom:16px'>"
-    +"<p class='ct'><i class='ti ti-message-circle-2'></i> Feedbacks a enviar este m\u00eas ("+lista.length+")</p>"
-    +"<div style='margin-bottom:10px'>"+rows+"</div>"
-    +"<button class='btn bsm' onclick=\"goTab('feedbacks')\"><i class='ti ti-arrow-right'></i> Ver todos em Feedbacks</button>"
+  return "<div class='card' style='margin-bottom:16px"+(outroProf?";border-left:4px solid #5E35B1;background:#F3E5F5":"")+"'>"
+    +"<p class='ct'"+(outroProf?"":"")+"><i class='ti ti-"+(outroProf?"eye":"message-circle-2")+"'></i> Feedbacks"+(outroProf?" — "+profNome:" a enviar este mês")+" ("+lista.length+")</p>"
+    +"<div style='margin-bottom:"+(outroProf?"0":"10px")+"'>"+rows+"</div>"
+    +(outroProf?"":"<button class='btn bsm' onclick=\"goTab('feedbacks')\"><i class='ti ti-arrow-right'></i> Ver todos em Feedbacks</button>")
     +"</div>";
 }
 // Aviso no painel (Secret\u00e1ria/Catarina): mostra quando a Amanda lan\u00e7a um feedback novo no
@@ -35444,7 +35525,8 @@ function verHistoricoFeedback(nome){
 function feedbacksTabHtml(){
   var canRegistrar=user.role!=="Professora";
   var ordemPeso={atrasado:0,embreve:1,semenvio:2,emdia:3};
-  var todos=todosObj().map(_feedbackInfoAluno);
+  var todos=[];
+  todosObj().forEach(function(a){_servicosFeedbackDoAluno(a).forEach(function(s){todos.push(s);});});
   todos.forEach(function(i){i.cancelado=eCanc(i.aluno.nome);});
   var lista=todos.slice();
   if(feedbackAlunoSel)lista=lista.filter(function(i){return i.aluno.nome===feedbackAlunoSel;});
@@ -35469,12 +35551,14 @@ function feedbacksTabHtml(){
     +"<div class='kpi'><div class='ka' style='background:var(--pu)'></div><p class='kl'>Sem 1\u00ba envio</p><p class='kv' style='color:var(--pu)'>"+totSemenvio+"</p><p class='ks'>nenhum feedback registrado</p></div>"
     +"<div class='kpi'><div class='ka' style='background:var(--gn)'></div><p class='kl'>Em dia</p><p class='kv' style='color:var(--gn)'>"+totEmdia+"</p><p class='ks'>dentro do ciclo</p></div>"
     +"</div>"
-    +"<p style='font-size:11px;color:var(--mt);margin:-8px 0 16px'>Os n\u00fameros acima consideram apenas alunos ativos.</p>";
+    +"<p style='font-size:11px;color:var(--mt);margin:-8px 0 16px'>Os n\u00fameros acima consideram apenas alunos ativos \u2014 quem tem dois servi\u00e7os (ex: Gin\u00e1stica + Karat\u00ea) conta uma vez pra cada um, com ciclos independentes.</p>";
+  var nomesVistos={};
   var opcoesAluno=todos.slice().sort(function(a,b){return a.aluno.nome<b.aluno.nome?-1:1;})
+    .filter(function(i){if(nomesVistos[i.aluno.nome])return false;nomesVistos[i.aluno.nome]=true;return true;})
     .map(function(i){return "<option value='"+i.aluno.nome.replace(/'/g,"&#39;")+"'"+(feedbackAlunoSel===i.aluno.nome?" selected":"")+">"+i.aluno.nome.split(" ").slice(0,2).join(" ")+(i.cancelado?" (Cancelado)":"")+"</option>";}).join("");
   var filtros="<div class='card' style='margin-bottom:16px'>"
     +"<div class='fi' style='max-width:340px'><label>Selecionar aluno</label>"
-    +"<select onchange='setFeedbackAluno(this.value)'><option value=''>Todos os alunos ("+todos.length+")</option>"+opcoesAluno+"</select></div>"
+    +"<select onchange='setFeedbackAluno(this.value)'><option value=''>Todos os alunos ("+Object.keys(nomesVistos).length+")</option>"+opcoesAluno+"</select></div>"
     +"</div>";
   var statusMeta={
     atrasado:{cor:"var(--rd)",bg:"var(--rl)",icon:"ti-alert-circle",label:"Atrasado"},
@@ -35489,6 +35573,7 @@ function feedbacksTabHtml(){
     var meta=i.cancelado?{cor:"var(--mt)",bg:"var(--b3)",icon:"ti-x",label:"Cancelado"}:statusMeta[i.status];
     var ultimoTxt=i.ultimo?fd(i.ultimo.data):"nenhum envio";
     var subInfo="\u00daltimo: "+ultimoTxt+" &middot; "+i.qtd+"x no total";
+    var labelBadge=i.label?" <span class='badge' style='background:#E1D5F5;color:#5E35B1;font-size:9px;margin-left:6px'>"+i.label+"</span>":"";
     var proximoBloco=(i.cancelado||!i.proximo)?"":
       "<div style='text-align:center;flex-shrink:0'>"
       +"<p style='font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:.04em;margin:0 0 2px'>Pr\u00f3ximo</p>"
@@ -35499,7 +35584,7 @@ function feedbacksTabHtml(){
       +" onclick=\""+acaoFn+"('"+i.aluno.nome.replace(/'/g,"\\'")+"')\">"
       +"<div style='width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;background:"+meta.bg+";color:"+meta.cor+"'>"+iniciais+"</div>"
       +"<div style='flex:1;min-width:0'>"
-      +"<p style='font-size:13px;font-weight:700;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"+nomeCurto+"</p>"
+      +"<p style='font-size:13px;font-weight:700;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"+nomeCurto+labelBadge+"</p>"
       +"<p style='font-size:11px;color:var(--mt);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"+subInfo+"</p>"
       +"</div>"
       +proximoBloco
@@ -35563,7 +35648,7 @@ function editarMatricula(nome){
           +"<div style='display:flex;justify-content:space-between;align-items:center'>"
           +"<span style='font-size:12px;font-weight:600'>"+fd(f.data)+"</span>"
           +"<div style='display:flex;align-items:center;gap:6px'>"
-          +"<span class='badge "+(f.prof==="Amanda"?"bb":"bpu")+"'>"+f.prof+"</span>"
+          +"<span class='badge' style='background:"+_modalidadeInfo(f.prof).bg+";color:"+_modalidadeInfo(f.prof).cor+"'>"+f.prof+"</span>"
           +"<button class='btn bd bsm' onclick=\"excluirFeedback("+gIdx+",'"+nome.replace(/'/g,"\\'")+"')\" title='Excluir'><i class='ti ti-trash'></i></button>"
           +"</div></div>"
           +"<p style='font-size:12px;color:var(--mt);margin-top:4px'>"+f.texto+"</p></div>";
@@ -35571,6 +35656,7 @@ function editarMatricula(nome){
   var dOpts=DIAS.map(function(dd){return "<option"+(dd===(d.diasSem||"")?" selected":"")+">"+dd+"</option>";}).join("");
   var hOpts=HORAS.map(function(h){return "<option"+(h===(d.horario||"")?" selected":"")+">"+h+"</option>";}).join("");
   // dataMatricula do aluno
+  var primeiros=_primeiroEventoPorAluno();
   var hist=(D.historico||[]).filter(function(h){return h.nome===nome;});
   var histRows=hist.length===0
     ?"<p class='empty' style='padding:1rem'>Nenhum histórico registrado.</p>"
@@ -35579,6 +35665,7 @@ function editarMatricula(nome){
       var isCancelado=String(h.evento||"")==="cancelado";
       var isMatricula=h.evento==="matricula";
       var isRenovacao=h.evento==="renovacao";
+      var ehPrimeira=primeiros[h.nome]===h;
       if(isCancelado){
         return "<div style='padding:10px 0;border-bottom:1px solid var(--br)'>"
           +"<div style='display:flex;align-items:center;justify-content:space-between'>"
@@ -35590,10 +35677,19 @@ function editarMatricula(nome){
           +"<button class='btn bd bsm' onclick=\"excluirHistorico("+gIdx+",'"+nome.replace(/'/g,"\\'")+"')\" title='Excluir'><i class='ti ti-trash'></i></button>"
           +"</div></div>";
       }
+      var labelEvento;
+      var badgeCls;
+      if(isRenovacao){labelEvento="<i class='ti ti-repeat'></i> Renovação";badgeCls="bb";}
+      else if(ehPrimeira){labelEvento="<i class='ti ti-user-plus'></i> 1ª Matrícula";badgeCls="btl";}
+      else{
+        var mi=_modalidadeInfo(h.prof);
+        labelEvento="<i class='ti ti-user-plus'></i> Matrícula — "+mi.nome+" ("+(h.prof||"—")+")";
+        badgeCls="";
+      }
       return "<div style='padding:10px 0;border-bottom:1px solid var(--br)'>"
         +"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'>"
-        +"<span class='badge "+(isMatricula?"btl":"bb")+"'>"
-        +(isMatricula?"<i class='ti ti-user-plus'></i> 1ª Matrícula":"<i class='ti ti-repeat'></i> Renovação")
+        +"<span class='badge "+badgeCls+"'"+(badgeCls?"":" style='background:"+_modalidadeInfo(h.prof).bg+";color:"+_modalidadeInfo(h.prof).cor+"'")+">"
+        +labelEvento
         +"</span>"
         +"<div style='display:flex;align-items:center;gap:8px'>"
         +(isRenovacao?"<span style='font-size:11px;color:var(--mt)'>Renovado em "+fd(h.dataRenovacao)+"</span>":"")
@@ -35606,13 +35702,39 @@ function editarMatricula(nome){
         +"<div><span style='color:var(--mt)'>Valor:</span><br><strong>"+BRL(h.valor)+"</strong></div>"
         +"</div></div>";
     }).join("");
+  // ---- Serviços adicionais (ex: já faz Ginástica e também matricula no Karatê) ----
+  var extras=_servicosExtrasDoAluno(nome);
+  var profsDisponiveis=["Amanda","Nathalia","Lilian"].filter(function(p){return p!==d.prof&&!extras.some(function(e){return e.prof===p;});});
+  var extrasRows=extras.length===0?"<p class='empty' style='padding:0.75rem 0'>Nenhum serviço adicional.</p>"
+    :extras.map(function(e){
+      var mi=_modalidadeInfo(e.prof);
+      return "<div style='display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 0;border-bottom:1px solid var(--br)'>"
+        +"<div>"
+        +"<span class='badge' style='background:"+mi.bg+";color:"+mi.cor+"'>"+mi.nome+" — "+e.prof+"</span>"
+        +"<p style='font-size:11px;color:var(--mt);margin:4px 0 0'>"+(e.plano||"—")+" &middot; "+BRL(e.valor)+" &middot; "+(e.diasSem||"—")+" "+(e.horario||"")+" &middot; desde "+fd(e.data)+"</p>"
+        +"</div>"
+        +"<button class='btn bd bsm' onclick=\"removerServicoExtra('"+e.id+"','"+nome.replace(/'/g,"\\'")+"')\" title='Remover'><i class='ti ti-trash'></i></button>"
+        +"</div>";
+    }).join("");
+  var formNovoServico=profsDisponiveis.length===0?"<p style='font-size:12px;color:var(--mt);margin-top:10px'>Este aluno já está matriculado em todas as modalidades/professoras.</p>":
+    "<div class='dv'></div>"
+    +"<p style='font-size:12px;font-weight:600;margin-bottom:8px'>Adicionar serviço (ex: também vai fazer Karatê com a Lilian)</p>"
+    +"<div class='fr3'><div class='fi'><label>Professora</label><select id='sv-prof'>"+profsDisponiveis.map(function(p){return "<option>"+p+"</option>";}).join("")+"</select></div>"
+    +"<div class='fi'><label>Plano</label><select id='sv-plano'>"+["Mensal","Trimestral","Semestral","Anual"].map(function(p){return "<option"+(p===d.plano?" selected":"")+">"+p+"</option>";}).join("")+"</select></div>"
+    +"<div class='fi'><label>Data de matr\u00edcula</label><input type='date' id='sv-data'></div></div>"
+    +"<div class='fr3'><div class='fi'><label>Valor (R$)</label><input type='number' id='sv-valor' step='0.01' placeholder='0,00'></div>"
+    +"<div class='fi'><label>Dia(s) da semana</label><select id='sv-dias'>"+dOpts+"</select></div>"
+    +"<div class='fi'><label>Hor\u00e1rio</label><select id='sv-hora'>"+hOpts+"</select></div></div>"
+    +"<button class='btn bp' style='margin-top:4px' onclick=\"adicionarServicoExtra('"+nome.replace(/'/g,"\\'")+"')\"><i class='ti ti-plus'></i> Adicionar serviço</button>"
+    +"<div id='sv-msg' style='margin-top:8px'></div>";
   var dataMat=d.dataMatricula||d.data||"";
   var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\">"
     +"<div class='modal modal-lg'>"
     +"<p class='modal-title'><i class='ti ti-edit' style='color:var(--brand2)'></i> Editar &mdash; "+nome.split(" ").slice(0,2).join(" ")+"</p>"
     +"<div class='tabs'><button class='tab active' id='etab1' onclick='switchETab(1)'>Dados da Matr\u00edcula</button>"
     +"<button class='tab' id='etab2' onclick='switchETab(2)'>Feedbacks ("+feedbacks.length+")</button>"
-    +"<button class='tab' id='etab3' onclick='switchETab(3)'>Hist\u00f3rico ("+hist.length+")</button></div>"
+    +"<button class='tab' id='etab3' onclick='switchETab(3)'>Hist\u00f3rico ("+hist.length+")</button>"
+    +"<button class='tab' id='etab4' onclick='switchETab(4)'>Servi\u00e7os ("+extras.length+")</button></div>"
     +"<div id='etab-1'>"
     +"<div class='fr'><div class='fi'><label>Data de matr\u00edcula</label><input type='date' id='edm' value='"+dataMat+"'></div>"
     +"<div class='fi'><label>N\u00ba matr\u00edcula</label><input type='text' id='ednu' value='"+(d.numero||"")+"' placeholder='000001'></div>"
@@ -35621,7 +35743,7 @@ function editarMatricula(nome){
     +["Mensal","Trimestral","Semestral","Anual"].map(function(p){return "<option"+(p===d.plano?" selected":"")+">"+p+"</option>";}).join("")
     +"</select></div>"
     +"<div class='fi'><label>Valor (R$)</label><input type='number' id='ev' value='"+(d.valor||"")+"' step='0.01'></div>"
-    +"<div class='fi'><label>Professora</label><select id='epr'><option"+(d.prof==="Amanda"?" selected":"")+">Amanda</option><option"+(d.prof==="Nathalia"?" selected":"")+">Nathalia</option></select></div></div>"
+    +"<div class='fi'><label>Professora</label><select id='epr'><option"+(d.prof==="Amanda"?" selected":"")+">Amanda</option><option"+(d.prof==="Nathalia"?" selected":"")+">Nathalia</option><option"+(d.prof==="Lilian"?" selected":"")+">Lilian</option></select></div></div>"
     +"<div class='fr3'><div class='fi'><label>Dia(s) da semana</label><select id='eds'>"+dOpts+"</select></div>"
     +"<div class='fi'><label>Hor\u00e1rio</label><select id='eh'>"+hOpts+"</select></div>"
     +"<div class='fi'><label>Desconto (R$)</label><input type='number' id='edes' value='"+(d.desconto||0)+"' step='0.01'></div></div>"
@@ -35643,7 +35765,7 @@ function editarMatricula(nome){
     +"<div class='dv'></div>"
     +"<p style='font-size:12px;font-weight:600;margin-bottom:8px'>Adicionar feedback</p>"
     +"<div class='fr'><div class='fi'><label>Data</label><input type='date' id='fbd'></div>"
-    +"<div class='fi'><label>Professora</label><select id='fbp'><option>Amanda</option><option>Nathalia</option></select></div></div>"
+    +"<div class='fi'><label>Professora</label><select id='fbp'><option>Amanda</option><option>Nathalia</option><option>Lilian</option></select></div></div>"
     +"<div class='fi' style='margin-bottom:10px'><label>Feedback</label>"
     +"<textarea id='fbt' rows='3' placeholder='Desempenho, observa\u00e7\u00f5es...' style='resize:vertical'></textarea></div>"
     +"<div style='display:flex;gap:8px'>"
@@ -35653,12 +35775,18 @@ function editarMatricula(nome){
     +"<div id='etab-3' style='display:none'>"
     +"<div style='max-height:300px;overflow-y:auto'>"+histRows+"</div>"
     +"</div>"
+    +"<div id='etab-4' style='display:none'>"
+    +"<p style='font-size:11px;color:var(--mt);margin:0 0 10px'>Use isso quando um aluno já matriculado passa a fazer também outra modalidade (ex: já faz Ginástica com a Amanda e agora também vai fazer Karatê com a Lilian). Não cria um aluno novo nem conta como matrícula nova nas estatísticas — só registra o serviço e aparece no histórico dele.</p>"
+    +"<div style='max-height:200px;overflow-y:auto;margin-bottom:6px'>"+extrasRows+"</div>"
+    +formNovoServico
+    +"</div>"
     +"</div></div>";
   document.getElementById("mc").innerHTML=html;
   var fbd=document.getElementById("fbd");if(fbd)fbd.value=fdISO(new Date());
+  var svd=document.getElementById("sv-data");if(svd)svd.value=fdISO(new Date());
 }
 function switchETab(n){
-  [1,2,3].forEach(function(i){
+  [1,2,3,4].forEach(function(i){
     var el=document.getElementById("etab-"+i);if(el)el.style.display=n===i?"":"none";
     var btn=document.getElementById("etab"+i);if(btn)btn.className="tab"+(n===i?" active":"");
   });
@@ -39714,26 +39842,28 @@ function agendaPendenciasEvolucao(profNome){
   return pend;
 }
 // Card do painel da Professora com as evoluções pendentes.
+// outroProf=true => versão "supervisão" (usada no painel da Amanda pra acompanhar a Lilian):
+// layout roxo/informativo, sem o alarme vermelho e sem o atalho de preencher (não é aula dela).
 function evolucoesPendentesCardHtml(profNome,outroProf){
   var pend=agendaPendenciasEvolucao(profNome);
-  var titulo=outroProf?("Evoluções pendentes \u2014 "+profNome):"Evoluções pendentes";
+  var titulo=outroProf?("Evoluções da "+profNome):"Evoluções pendentes";
   if(pend.length===0){
-    return "<div class='card' style='margin-bottom:16px;border-left:4px solid #2E7D32;background:#E8F5E9'>"
+    return "<div class='card' style='margin-bottom:16px;border-left:4px solid "+(outroProf?"#5E35B1;background:#F3E5F5":"#2E7D32;background:#E8F5E9")+"'>"
       +"<p class='ct' style='margin-bottom:2px'><i class='ti ti-circle-check'></i> "+(outroProf?profNome+" est\u00e1 em dia":"Evoluções em dia")+"</p>"
       +"<p style='font-size:12px;color:var(--mt);margin:0'>Nenhuma evolução pendente"+(outroProf?" de "+profNome:"")+" desde "+fd(EVOLUCAO_INICIO)+".</p></div>";
   }
   var hoje=fdISO(new Date());
-  var html="<div class='card' style='margin-bottom:16px;border-left:4px solid #D32F2F;background:#FFEBEE'>";
-  html+="<p class='ct' style='margin-bottom:2px'><i class='ti ti-alert-triangle'></i> "+titulo+"<span class='badge br2' style='margin-left:8px'>"+pend.length+"</span></p>";
-  html+="<p style='font-size:11px;color:var(--mt);margin:0 0 10px'>"+(outroProf?"Aulas de "+profNome+" já dadas sem evolução registrada — inclusive faltas.":"Aulas já dadas sem evolução registrada — inclusive faltas, que também precisam ser preenchidas.")+"</p>";
+  var html="<div class='card' style='margin-bottom:16px;border-left:4px solid "+(outroProf?"#5E35B1;background:#F3E5F5":"#D32F2F;background:#FFEBEE")+"'>";
+  html+="<p class='ct' style='margin-bottom:2px'><i class='ti ti-"+(outroProf?"eye":"alert-triangle")+"'></i> "+titulo+"<span class='badge"+(outroProf?"":" br2")+"' style='margin-left:8px"+(outroProf?";background:#E1D5F5;color:#5E35B1":"")+"'>"+pend.length+"</span></p>";
+  html+="<p style='font-size:11px;color:var(--mt);margin:0 0 10px'>"+(outroProf?"Acompanhamento — aulas de "+profNome+" já dadas sem evolução registrada — inclusive faltas.":"Aulas já dadas sem evolução registrada — inclusive faltas, que também precisam ser preenchidas.")+"</p>";
   html+="<div>"+pend.map(function(a){
     var atrasado=a.data<hoje;
     var faltou=a.presenca==="falta";
     var nomeReal=_alunoBase(a.aluno);
-    var tagData=a.data===hoje?"<span class='badge bam' style='margin-left:6px'>Hoje</span>":(atrasado?"<span class='badge br2' style='margin-left:6px'>Atrasada</span>":"");
+    var tagData=a.data===hoje?"<span class='badge bam' style='margin-left:6px'>Hoje</span>":(atrasado?"<span class='badge "+(outroProf?"":"br2")+"' style='margin-left:6px"+(outroProf?";background:#E1D5F5;color:#5E35B1":"")+"'>Atrasada</span>":"");
     var tagFalta=faltou?"<span class='badge' style='margin-left:6px;background:#9E9E9E;color:#fff'>Faltou</span>":"";
     var clickAttr=outroProf?"":" style='cursor:pointer' onclick='irParaEvolucaoPendente(\""+nomeReal.replace(/"/g,"&quot;")+"\",\""+a.data+"\")'";
-    return "<div class='timeline-item tl-red'"+clickAttr+">"
+    return "<div class='timeline-item "+(outroProf?"tl-purple":"tl-red")+"'"+clickAttr+">"
       +"<p style='font-weight:700;font-size:12px;margin:0;display:flex;align-items:center;flex-wrap:wrap'>"+fd(a.data)+" &middot; "+nomeReal+tagData+tagFalta+"</p>"
       +(outroProf?"":"<p style='font-size:11px;color:var(--brand2);margin:2px 0 0'><i class='ti ti-pencil'></i> Toque para preencher a evolução</p>")
       +"</div>";
