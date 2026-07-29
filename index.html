@@ -37293,20 +37293,18 @@ function relHtml(){
     +"</div>"
     // Matrículas — visível para todos, calculado automaticamente a partir da aba Matrículas
     +"<div class='card'><p class='ct'><i class='ti ti-users'></i> Movimenta\u00e7\u00e3o de Matr\u00edculas <span style='font-size:11px;color:var(--mt);font-weight:400'>(calculado automaticamente com base na aba Matr\u00edculas)</span></p>"
-    +"<div class='g4'>"
+    +"<div class='g4' style='grid-template-columns:repeat(5,1fr);margin-bottom:"+(mov.extras>0?"4px":"0")+"'>"
     +"<div class='kpi'><div class='ka' style='background:var(--brand2)'></div><p class='kl'>Ativas</p><p class='kv' style='color:var(--brand2)'>"+mov.ativas+"</p><p class='ks'>no m\u00eas selecionado</p></div>"
     +"<div class='kpi'><div class='ka' style='background:var(--gn)'></div><p class='kl'>Renovadas</p><p class='kv' style='color:var(--gn)'>"+mov.renovadas+"</p><p class='ks'>rematr\u00edculas no m\u00eas</p></div>"
     +"<div class='kpi'><div class='ka' style='background:var(--rd)'></div><p class='kl'>Canceladas</p><p class='kv' style='color:var(--rd)'>"+mov.canceladas+"</p><p class='ks'>cancelamentos no m\u00eas</p></div>"
     +"<div class='kpi'><div class='ka' style='background:var(--pu)'></div><p class='kl'>Novas</p><p class='kv' style='color:var(--pu)'>"+mov.novas+"</p><p class='ks'>matr\u00edculas novas no m\u00eas</p></div>"
-    +"</div></div>"
-    // Serviços extras — aluno já matriculado que passou a fazer também outra modalidade
-    // (ex: Ginástica + Karatê). Não é matrícula nova, mas fica contabilizado à parte.
-    +"<div class='card' style='margin-bottom:16px;border-left:4px solid #5E35B1;background:#F3E5F5'>"
-    +"<p class='ct' style='margin-bottom:2px'><i class='ti ti-layers-union'></i> Servi\u00e7os Extras <span style='font-size:11px;color:var(--mt);font-weight:400'>(alunos j\u00e1 matriculados que passaram a fazer tamb\u00e9m outra modalidade)</span></p>"
-    +"<div style='display:flex;align-items:baseline;gap:8px;margin:6px 0 10px'><span style='font-size:28px;font-weight:800;color:#5E35B1'>"+mov.extras+"</span><span style='font-size:12px;color:var(--mt)'>contrata\u00e7\u00e3o(\u00f5es) de servi\u00e7o adicional no m\u00eas</span></div>"
-    +(mov.extras>0?"<div class='ox'><table><thead><tr><th>Aluno</th><th>Servi\u00e7o</th><th>Professora</th><th>Data</th></tr></thead><tbody>"
+    +"<div class='kpi'><div class='ka' style='background:#5E35B1'></div><p class='kl'>Serviços Extras</p><p class='kv' style='color:#5E35B1'>"+mov.extras+"</p><p class='ks'>servi\u00e7o adicional no m\u00eas</p></div>"
+    +"</div>"
+    +(mov.extras>0?"<details style='margin-top:8px'><summary style='font-size:12px;color:#5E35B1;font-weight:600;cursor:pointer'>Ver quem contratou servi\u00e7o adicional este m\u00eas ("+mov.extras+")</summary>"
+      +"<div class='ox' style='margin-top:10px'><table><thead><tr><th>Aluno</th><th>Servi\u00e7o adicionado</th><th>Professora</th><th>Data</th></tr></thead><tbody>"
       +mov.extrasLista.map(function(h){var mi=_modalidadeInfo(h.prof);return "<tr><td style='font-weight:600'>"+h.nome.split(" ").slice(0,2).join(" ")+"</td><td><span class='badge' style='background:"+mi.bg+";color:"+mi.cor+"'>"+mi.nome+"</span></td><td>"+(h.prof||"—")+"</td><td>"+fd(h.dataEvento)+"</td></tr>";}).join("")
-      +"</tbody></table></div>":"<p style='font-size:12px;color:var(--mt);margin:0'>Nenhuma contrata\u00e7\u00e3o de servi\u00e7o extra neste m\u00eas.</p>")
+      +"</tbody></table></div></details>":"")
+    +"<p style='font-size:11px;color:var(--mt);margin:10px 0 0'><i class='ti ti-info-circle'></i> \"Servi\u00e7os Extras\" = alunos j\u00e1 matriculados que passaram a fazer tamb\u00e9m outra modalidade (ex: Gin\u00e1stica + Karat\u00ea). N\u00e3o conta como matr\u00edcula nova.</p>"
     +"</div>"
     // Dashboard de planos + financeiro — apenas Gestora
     +(user.role==="Gestora"
@@ -40656,12 +40654,25 @@ function _servicosLabelAluno(aluno){
 // Data de matrícula NO SERVIÇO da professora logada — ex: se a Lilian está vendo o prontuário de
 // um aluno que já era da Ginástica com a Amanda antes de matricular no Karatê com ela, aqui aparece
 // a data em que ELE ENTROU NO KARATÊ, não a data da 1ª matrícula geral do aluno na academia.
+// IMPORTANTE: usa o HISTÓRICO (evento "matricula" mais antigo daquele aluno+professora), e não o
+// campo "dataMatricula" do cadastro ao vivo — esse campo é sobrescrito a cada renovação de plano,
+// então usar ele mostraria a data da última renovação em vez da matrícula original.
 // Para Catarina/Secretaria (sem modalidade própria), cai no fallback da 1ª matrícula mesmo.
 function _dataMatriculaParaVisualizacao(aluno){
   var profNome=user.role==="Professora"?((user.name||"").replace("Professora ","").trim()||"Amanda"):null;
   var d=getDados(aluno);
   if(profNome){
-    if(d&&d.prof===profNome)return {data:d.dataMatricula||d.data||"",label:_modalidadeInfo(profNome).nome};
+    if(d&&d.prof===profNome){
+      var primeiroProf=_primeiroEventoPorAlunoEProf()[aluno+"|"+profNome];
+      var primeiroGeral=_primeiroEventoPorAluno()[aluno];
+      // Prioridade: 1) 1º evento de matrícula com essa professora exata; 2) 1º evento de matrícula do
+      // aluno de qualquer forma (cobre registros antigos sem o campo "prof" preenchido no histórico);
+      // 3) só em último caso o campo ao vivo (que pode já ter sido sobrescrito por uma renovação).
+      var dataOriginal=(primeiroProf&&(primeiroProf.dataMatricula||primeiroProf.dataEvento))
+        ||(primeiroGeral&&(primeiroGeral.dataMatricula||primeiroGeral.dataEvento))
+        ||d.dataMatricula||d.data||"";
+      return {data:dataOriginal,label:_modalidadeInfo(profNome).nome};
+    }
     var extra=_servicosExtrasDoAluno(aluno).find(function(e){return e.prof===profNome;});
     if(extra)return {data:extra.data,label:_modalidadeInfo(profNome).nome};
   }
