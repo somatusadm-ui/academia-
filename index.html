@@ -34550,6 +34550,39 @@ function baterPontoCardHtml(){
     +(campoProx?"<p style='font-size:10.5px;color:var(--mt);margin:10px 0 0;text-align:center'><i class='ti ti-map-pin'></i> Sua localiza\u00e7\u00e3o \u00e9 registrada junto com cada marca\u00e7\u00e3o.</p>":"")
     +"</div></div>";
 }
+// Card "Próximos ao vencimento" (contratos vencendo nos próximos 15 dias) — usado tanto no
+// painel da Gestora quanto no da Secretária.
+function proximosVencimentoCardHtml(proximos15,hojeDate0){
+  return "<div class='sidebar-head'><i class='ti ti-calendar-event'></i> Próximos ao vencimento<span class='sidebar-badge'>"+proximos15.length+"</span></div>"
+    +"<div class='sidebar-body'>"
+    +(proximos15.length===0
+      ? "<p class='empty' style='padding:8px 0'>Nenhum contrato vencendo nos próximos 15 dias.</p>"
+      : proximos15.map(function(a){
+          var v=calcVencContrato(a.dataMatricula,a.plano);
+          var vencDate=new Date(v+"T00:00:00");
+          var diasRest=Math.round((vencDate-hojeDate0)/(1000*60*60*24));
+          var urgente=diasRest<=3;
+          return "<div class='venc15-item' style='background:"+(urgente?"#FFF3E0":"#F7F9FA")+";border-left-color:"+(urgente?"#FF6F00":"var(--brand2)")+"' onclick='goTab(\"alunos\")'>"
+            +"<div style='font-weight:600;font-size:12px;color:var(--tx)'>"+a.nome.split(" ").slice(0,2).join(" ")+"</div>"
+            +"<div style='font-size:11px;color:var(--mt);margin-top:2px'>"+a.plano+" &middot; vence em "+fd(v)+"</div>"
+            +"<div style='font-size:10px;margin-top:4px;color:"+(urgente?"#FF6F00":"var(--brand2)")+";font-weight:600'>"+(diasRest===0?"Vence hoje":diasRest+" dia(s)")+"</div>"
+            +"</div>";
+        }).join(""))
+    +"</div>";
+}
+// Card "Alunos Ativos / Matrículas Novas" — só contagens, sem nenhum valor financeiro. Usado no
+// painel da Secretária.
+function alunosMatriculasNovasCardHtml(){
+  var totalAtivosSec=ativos().length;
+  var movSec=_movimentacoesMes(mesAtualPfx());
+  return "<div class='card painel-card-pro'>"
+    +"<p class='painel-section-label'>Alunos</p>"
+    +"<div class='ct'><i class='ti ti-users'></i> Panorama de alunos</div>"
+    +"<div class='kg' style='grid-template-columns:1fr 1fr'>"
+    +"<div class='kpi'><div class='ka' style='background:var(--brand)'></div><p class='kl'>Ativos</p><p class='kv' style='color:var(--brand)'>"+totalAtivosSec+"</p><p class='ks'>total na academia</p></div>"
+    +"<div class='kpi'><div class='ka' style='background:var(--pu)'></div><p class='kl'>Matrículas Novas</p><p class='kv' style='color:var(--pu)'>"+movSec.novas+"</p><p class='ks'>este mês</p></div>"
+    +"</div></div>";
+}
 function painelHtml(){
   var pfx=mesAtualPfx();
   var pagMes=D.pag.filter(function(p){return p.data&&p.data.startsWith(pfx);});
@@ -34733,8 +34766,12 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
     return heroSimplesHtml
       +aniversarioBannerHtml()+mensagemDoDiaHtml()+baterPontoCardHtml()
       +"<div class='painel-2col'>"
-      +"<div>"+feedbacksDoMesCardHtml()+avisoFeedbackLancadoCardHtml()+alertaHtml+resumoMensalHtml+"</div>"
-      +"<div>"+semAutorizacaoImagemCardHtml()+experimentaisMesCardHtml()+"<div style='margin-top:16px'></div>"+agendaHojeCardHtml(null)+"</div>"
+      +"<div>"+feedbacksDoMesCardHtml()+avisoFeedbackLancadoCardHtml()+alertaHtml
+        +"<div class='card painel-card-pro' style='margin-bottom:16px'>"+proximosVencimentoCardHtml(proximos15,hojeDate0)+"</div>"
+        +resumoMensalHtml
+        +"<div class='g2'>"+alunosMatriculasNovasCardHtml()+experimentaisMesCardHtml()+"</div>"
+        +"</div>"
+      +"<div>"+semAutorizacaoImagemCardHtml()+"<div style='margin-top:16px'></div>"+agendaHojeCardHtml(null)+"</div>"
       +"</div>";
   }
 
@@ -34763,22 +34800,7 @@ var ativosArray=Object.keys(ativosUnicos).map(function(k){
     +"</div>";
 
   var proximos15HtmlPro="<div>"
-    +"<div class='sidebar-head'><i class='ti ti-calendar-event'></i> Próximos ao vencimento<span class='sidebar-badge'>"+proximos15.length+"</span></div>"
-    +"<div class='sidebar-body'>"
-    +(proximos15.length===0
-      ? "<p class='empty' style='padding:8px 0'>Nenhum contrato vencendo nos próximos 15 dias.</p>"
-      : proximos15.map(function(a){
-          var v=calcVencContrato(a.dataMatricula,a.plano);
-          var vencDate=new Date(v+"T00:00:00");
-          var diasRest=Math.round((vencDate-hojeDate0)/(1000*60*60*24));
-          var urgente=diasRest<=3;
-          return "<div class='venc15-item' style='background:"+(urgente?"#FFF3E0":"#F7F9FA")+";border-left-color:"+(urgente?"#FF6F00":"var(--brand2)")+"' onclick='goTab(\"alunos\")'>"
-            +"<div style='font-weight:600;font-size:12px;color:var(--tx)'>"+a.nome.split(" ").slice(0,2).join(" ")+"</div>"
-            +"<div style='font-size:11px;color:var(--mt);margin-top:2px'>"+a.plano+" &middot; vence em "+fd(v)+"</div>"
-            +"<div style='font-size:10px;margin-top:4px;color:"+(urgente?"#FF6F00":"var(--brand2)")+";font-weight:600'>"+(diasRest===0?"Vence hoje":diasRest+" dia(s)")+"</div>"
-            +"</div>";
-        }).join(""))
-    +"</div>"
+    +proximosVencimentoCardHtml(proximos15,hojeDate0)
     +"<div class='card painel-card-pro' style='margin-top:16px;margin-bottom:0'>"
     +"<p class='painel-section-label'>Faturamento semestral</p>"
     +"<div class='ct' style='margin-bottom:8px'><i class='ti ti-chart-area-line'></i> Últimos 6 meses</div>"
@@ -37287,10 +37309,6 @@ function relHtml(){
   var mov=_movimentacoesMes(_ra+"-"+_rm);
 
   return "<div style='margin-bottom:16px'><div class='fi' style='max-width:200px'><label>Mês do Relatório "+debugMeses+"</label><select onchange='setMesRel(this.value)'>"+opts_rel_html+"</select></div></div>"
-    +"<div class='card' style='margin-bottom:16px;border-top:3px solid var(--brand2)'><p class='ct'><i class='ti ti-file-type-doc'></i> Declaração de Faturamento (Word)</p>"
-    +"<p style='font-size:12px;color:var(--mt);margin:-6px 0 14px'>Gera o documento completo — declaração + relatório financeiro do mês selecionado acima — já preenchido com os dados do sistema, pronto para enviar à franquia.</p>"
-    +"<button class='btn bp' onclick='gerarDeclaracaoFaturamentoWord()'><i class='ti ti-download'></i> Gerar Declaração — "+mesAtualRel+"</button>"
-    +"</div>"
     // Matrículas — visível para todos, calculado automaticamente a partir da aba Matrículas
     +"<div class='card'><p class='ct'><i class='ti ti-users'></i> Movimenta\u00e7\u00e3o de Matr\u00edculas <span style='font-size:11px;color:var(--mt);font-weight:400'>(calculado automaticamente com base na aba Matr\u00edculas)</span></p>"
     +"<div class='g4' style='grid-template-columns:repeat(5,1fr);margin-bottom:"+(mov.extras>0?"4px":"0")+"'>"
@@ -37317,17 +37335,19 @@ function relHtml(){
         +"<div class='kpi'><div class='ka' style='background:var(--pu)'></div><p class='kl'>Semestral</p><p class='kv' style='color:var(--pu)'>"+plSemestral+"</p><p class='ks'>alunos</p></div>"
         +"<div class='kpi'><div class='ka' style='background:var(--tl)'></div><p class='kl'>Anual</p><p class='kv' style='color:var(--tl)'>"+plAnual+"</p><p class='ks'>alunos</p></div>"
         +"</div></div>"
-        +"<div class='kg'>"
-        +"<div class='kpi'><div class='ka' style='background:var(--gn)'></div><p class='kl'>Fat. Bruto</p><p class='kv' style='color:var(--gn)'>"+BRL(t.b)+"</p></div>"
-        +"<div class='kpi'><div class='ka' style='background:var(--brand2)'></div><p class='kl'>Fat. Líquido</p><p class='kv' style='color:var(--brand2)'>"+BRL(t.l)+"</p></div>"
-        +"<div class='kpi'><div class='ka' style='background:var(--rd)'></div><p class='kl'>Despesas</p><p class='kv' style='color:var(--rd)'>"+BRL(desp)+"</p></div>"
-        +"<div class='kpi'><div class='ka' style='background:"+(res>=0?"var(--gn)":"var(--rd)")+"'></div><p class='kl'>Resultado</p><p class='kv' style='color:"+(res>=0?"var(--gn)":"var(--rd)")+"'>"+BRL(res)+"</p></div>"
-        +"</div>"
-        +"<div class='g2'><div class='card c0'><p class='ct'><i class='ti ti-chart-bar'></i> Resumo financeiro</p>"
+        +"<div class='g2'>"
+        +"<div class='card c0'><p class='ct'><i class='ti ti-chart-bar'></i> Resumo financeiro</p>"
+        +"<div class='sr'><span class='sl'>Faturamento Bruto</span><span class='sv' style='color:var(--gn)'>"+BRL(t.b)+"</span></div>"
+        +"<div class='sr'><span class='sl'>Faturamento Líquido</span><span class='sv' style='color:var(--brand2)'>"+BRL(t.l)+"</span></div>"
+        +"<div class='sr'><span class='sl'>Despesas</span><span class='sv' style='color:var(--rd)'>"+BRL(desp)+"</span></div>"
+        +"<div class='sr'><span class='sl'>Resultado</span><span class='sv' style='color:"+(res>=0?"var(--gn)":"var(--rd)")+"'>"+BRL(res)+"</span></div>"
         +"<div class='sr'><span class='sl'>Royalties (7,5%)</span><span class='sv' style='color:var(--pu);font-weight:700'>"+BRL(t.b*0.075)+"</span></div>"
         +"<div class='sr'><span class='sl'>Despesas fixas</span><span class='sv' style='color:var(--rd)'>"+BRL(fx)+"</span></div>"
         +"<div class='sr'><span class='sl'>Despesas variáveis</span><span class='sv' style='color:var(--am)'>"+BRL(vr)+"</span></div>"
-        +"<div class='sr'><span class='sl'>Professoras</span><span class='sv'>"+BRL(totA())+"</span></div>"
+        +"</div>"
+        +"<div class='card c0' style='border-top:3px solid var(--brand2)'><p class='ct'><i class='ti ti-file-type-doc'></i> Declaração de Faturamento (Word)</p>"
+        +"<p style='font-size:12px;color:var(--mt);margin:-6px 0 14px'>Gera o documento completo — declaração + relatório financeiro do mês selecionado acima — já preenchido com os dados do sistema, pronto para enviar à franquia.</p>"
+        +"<button class='btn bp' onclick='gerarDeclaracaoFaturamentoWord()'><i class='ti ti-download'></i> Gerar Declaração — "+mesAtualRel+"</button>"
         +"</div>"
         +"</div>"
         +"<div class='card'><p class='ct'><i class='ti ti-download'></i> Exportar</p>"
