@@ -38041,7 +38041,7 @@ function agendaHtml(){
   html+="</div>";
   html+="<div class='fr3' style='margin-bottom:10px'>";
   html+="<div class='fi'><label>Professora</label><select id='ag-prof' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value='Amanda'>Amanda</option><option value='Nathalia'>Nathalia</option><option value='Lilian'>Lilian</option></select></div>";
-  html+="<div class='fi'><label>Frequência</label><select id='ag-freq' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value='avulso'>Avulso</option><option value='fixo'>Fixo (semanal até vencimento)</option></select></div>";
+  html+="<div class='fi'><label>Frequência</label><select id='ag-freq' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value='avulso'>Avulso</option><option value='um_mes'>1 Mês (semanal)</option><option value='fixo'>Fixo (semanal até vencimento)</option></select></div>";
   html+="<div class='fi'><label>Duração (min)</label><input type='number' id='ag-duracao' value='60' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'></div>";
   html+="</div>";
   html+="<div style='display:flex;gap:10px'><button class='btn bp' onclick='adicionarAulaAgenda()' style='flex:1'><i class='ti ti-check'></i> Adicionar</button><button class='btn' onclick='limparFormAgenda()'>Limpar</button></div>";
@@ -38148,6 +38148,7 @@ async function adicionarAulaAgenda(){
   }
   var cor=corProf(prof,tipo);
   var dataFim="";
+  var grupoId="";
   if(freq==="fixo"){
     var alunoData=D.mat.find(function(m){return m.nome===nomeOriginal;});
     if(!alunoData||!alunoData.dataMatricula){
@@ -38162,9 +38163,18 @@ async function adicionarAulaAgenda(){
     } else {
       dataFim=calcVencContrato(alunoData.dataMatricula,alunoData.plano);
     }
+  } else if(freq==="um_mes"){
+    // Gera aulas semanais (mesmo dia da semana do 1º agendamento) por 1 mês a partir da data escolhida
+    var dataIniUm=new Date(data);
+    dataFim=new Date(dataIniUm.getFullYear(),dataIniUm.getMonth()+1,dataIniUm.getDate());
+    dataFim=fdISO(dataFim);
+  }
+  if(freq==="fixo"||freq==="um_mes"){
+    // Identificador único da série, para permitir excluir "esta e as futuras" de uma vez
+    grupoId="G"+Date.now()+"_"+Math.random().toString(36).slice(2,8);
   }
   if(!D.agenda)D.agenda=[];
-  if(freq==="fixo"){
+  if(freq==="fixo"||freq==="um_mes"){
     var cur=new Date(data+"T12:00");
     var fim=new Date(dataFim+"T12:00");
     var geradas=0;
@@ -38192,12 +38202,13 @@ async function adicionarAulaAgenda(){
       duracao:duracao,
       professora:prof,
       tipo:tipo,
-      frequencia:"fixo",
+      frequencia:freq,
       dataFim:dataFim,
       status:"ativo",
       notas:"",
       cor:cor,
-      presenca:""
+      presenca:"",
+      grupoId:grupoId
     });
 
     geradas++;
@@ -38229,7 +38240,8 @@ if(!jaExiste){
     status:"ativo",
     notas:"",
     cor:cor,
-    presenca:""
+    presenca:"",
+    grupoId:""
   });
 
 }
@@ -38246,7 +38258,7 @@ if(!jaExiste){
 async function _saveAgendaNow(){
   if(syncing){ console.warn("saveAgenda bloqueado durante sync"); return false; }
   if(!D.agenda)D.agenda=[];
-  var h=["aluno","data","hora","duracao","professora","tipo","frequencia","dataFim","status","notas","cor","presenca"];
+  var h=["aluno","data","hora","duracao","professora","tipo","frequencia","dataFim","status","notas","cor","presenca","grupoId"];
   var rows=D.agenda.map(function(a){return h.map(function(k){var v=a[k];if(v===undefined||v===null)return "";return String(v);});});
   console.log("SALVANDO AGENDA:", rows.length);
   var ok=await rewriteAba("agenda",h,rows);
@@ -38749,11 +38761,52 @@ async function confirmarReagendamento(idx){
 // === EXCLUIR ===
 async function excluirAula(idx){
   if(user&&user.role==="Professora"){alert("Perfil somente visualização na Agenda.");return;}
+  var aula=D.agenda[idx];
+  if(!aula)return;
+  // Se a aula pertence a uma série (frequência "fixo" ou "1 Mês") e existem outras aulas
+  // futuras (ou a partir desta data) da mesma série, oferece a escolha: excluir só esta,
+  // ou esta + todas as futuras da série.
+  var futurasMesmaSerie=aula.grupoId?D.agenda.filter(function(a){return a.grupoId===aula.grupoId&&a.data>=aula.data;}):[];
+  if(aula.grupoId&&futurasMesmaSerie.length>1){
+    abrirModalExcluirSerie(aula.grupoId,aula.data,aula.hora,futurasMesmaSerie.length);
+    return;
+  }
   if(!confirm("Excluir esta aula? Isso é permanente."))return;
   D.agenda.splice(idx,1);
   var ok=await _saveAgendaNow();
   if(ok){closeModal();renderAgendaView(agendaView,null);}
   else{alert("Erro ao excluir aula.");}
+}
+
+// Modal de escolha ao excluir uma aula que faz parte de uma série (fixo / 1 mês)
+function abrirModalExcluirSerie(grupoId,data,hora,qtd){
+  var html="<div class='modal-overlay' onclick='closeModal()'><div class='modal' onclick='event.stopPropagation()'>";
+  html+="<p class='ct'><i class='ti ti-trash'></i> Excluir Aula</p>";
+  html+="<p style='font-size:13px;color:var(--mt);margin-bottom:14px'>Esta aula faz parte de uma série recorrente com "+qtd+" agendamento(s) a partir de "+fd(data)+". O que você deseja excluir?</p>";
+  html+="<div style='display:flex;flex-direction:column;gap:8px'>";
+  html+="<button class='btn' onclick='confirmarExcluirUnicaSerie(\""+grupoId+"\",\""+data+"\",\""+hora+"\")'><i class='ti ti-calendar-minus'></i> Excluir somente esta aula</button>";
+  html+="<button class='btn bd' onclick='confirmarExcluirSerie(\""+grupoId+"\",\""+data+"\")'><i class='ti ti-calendar-x'></i> Excluir esta e as futuras da série ("+qtd+")</button>";
+  html+="<button class='btn' onclick='closeModal()'>Cancelar</button>";
+  html+="</div></div></div>";
+  document.getElementById("mc").innerHTML=html;
+}
+
+async function confirmarExcluirUnicaSerie(grupoId,data,hora){
+  if(!confirm("Excluir somente esta aula da série?"))return;
+  var pos=D.agenda.findIndex(function(a){return a.grupoId===grupoId&&a.data===data&&a.hora===hora;});
+  if(pos<0){closeModal();return;}
+  D.agenda.splice(pos,1);
+  var ok=await _saveAgendaNow();
+  if(ok){closeModal();renderAgendaView(agendaView,null);}
+  else{alert("Erro ao excluir aula.");}
+}
+
+async function confirmarExcluirSerie(grupoId,dataInicio){
+  if(!confirm("Excluir esta aula e TODAS as futuras da série? Isso é permanente e não pode ser desfeito."))return;
+  D.agenda=D.agenda.filter(function(a){return !(a.grupoId===grupoId&&a.data>=dataInicio);});
+  var ok=await _saveAgendaNow();
+  if(ok){closeModal();renderAgendaView(agendaView,null);}
+  else{alert("Erro ao excluir aulas da série.");}
 }
 
 async function excluirTodas(){
