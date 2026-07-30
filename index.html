@@ -33536,7 +33536,7 @@ async function adicionarServicoExtra(nome){
   var id=_novoId("sv");
   D.servicosExtras.push({id:id,nome:nome,prof:prof,plano:plano,valor:valor,diasSem:diasSem,horario:horario,data:data,ativo:true});
   if(!D.historico)D.historico=[];
-  D.historico.push({nome:nome,plano:plano,valor:valor,diaVenc:"",prof:prof,dataMatricula:data,dataRenovacao:"",vencimento:calcVencContrato(data,plano)||"",evento:"matricula",dataEvento:data});
+  D.historico.push({nome:nome,plano:plano,valor:valor,diaVenc:"",prof:prof,dataMatricula:data,dataRenovacao:"",vencimento:calcVencContrato(data,plano)||"",evento:"matricula",dataEvento:data,freqSemanal:"1x"});
   var ok1=await saveServicosExtras();
   var ok2=await saveHistoricoAll();
   if(!ok1||!ok2){if(msgEl)msgEl.innerHTML="<div class='al2 ali'><i class='ti ti-alert-triangle'></i> Erro ao salvar. Verifique se a aba \"servicosextras\" existe na planilha.</div>";return;}
@@ -34172,7 +34172,7 @@ var abas=[
   // Criar registro de 1ª matrícula no histórico para quem ainda não tem
   if(!D.historico)D.historico=[];
   if(!D.pront)D.pront=[];
-  var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento"];
+  var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento","freqSemanal"];
   var todosList=todosObj();
   var _precisaSalvarHistBackfill=false;
   for(var i=0;i<todosList.length;i++){
@@ -34184,7 +34184,7 @@ var abas=[
       var hObj={nome:a.nome,plano:a.plano,valor:a.valor,diaVenc:a.diaVenc,prof:a.prof,
         dataMatricula:a.dataMatricula,dataRenovacao:"",
         vencimento:calcVencContrato(a.dataMatricula,a.plano)||"",
-        evento:"matricula",dataEvento:a.dataMatricula};
+        evento:"matricula",dataEvento:a.dataMatricula,freqSemanal:a.freqSemanal||"1x"};
       D.historico.push(hObj);
       _precisaSalvarHistBackfill=true;
     }
@@ -35747,10 +35747,11 @@ function editarMatricula(nome){
         +"<button class='btn bsm' style='background:var(--bl);color:var(--brand2);border-color:var(--bl)' onclick=\"editarHistorico("+gIdx+",'"+nome.replace(/'/g,"\\'")+"')\"><i class='ti ti-edit'></i></button>"
         +"<button class='btn bd bsm' onclick=\"excluirHistorico("+gIdx+",'"+nome.replace(/'/g,"\\'")+"')\" title='Excluir'><i class='ti ti-trash'></i></button>"
         +"</div></div>"
-        +"<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:12px'>"
+        +"<div style='display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;font-size:12px'>"
         +"<div><span style='color:var(--mt)'>Matrícula:</span><br><strong>"+(h.dataMatricula?fd(h.dataMatricula):"—")+"</strong></div>"
         +"<div><span style='color:var(--mt)'>Vencimento:</span><br><strong>"+(h.vencimento?fd(h.vencimento):"Mensal")+"</strong></div>"
         +"<div><span style='color:var(--mt)'>Valor:</span><br><strong>"+BRL(h.valor)+"</strong></div>"
+        +"<div><span style='color:var(--mt)'>Frequ\u00eancia:</span><br><strong>"+(h.freqSemanal||"1x")+" semanal</strong></div>"
         +"</div></div>";
     }).join("");
   // ---- Serviços adicionais (ex: já faz Ginástica e também matricula no Karatê) ----
@@ -35857,6 +35858,9 @@ function editarHistorico(idx,nome){
     +"</select></div>"
     +"<div class='fi'><label>Valor (R$)</label><input type='number' id='hev' value='"+(h.valor||0)+"' step='0.01'></div>"
     +"<div class='fi'><label>Data renovação</label><input type='date' id='hedr' value='"+(h.dataRenovacao||"")+"'></div></div>"
+    +"<div class='fi' style='margin-bottom:8px'><label>Vezes por semana</label><select id='hefreqsem'>"
+    +["1x","2x","3x","4x","5x"].map(function(f){return "<option value='"+f+"'"+(f===(h.freqSemanal||"1x")?" selected":"")+">"+f+" semanal</option>";}).join("")
+    +"</select></div>"
     +"<div style='display:flex;gap:8px;margin-top:8px'>"
     +"<button class='btn bp' style='flex:1;justify-content:center' onclick=\"salvarEdicaoHistorico("+idx+",'"+nome.replace(/'/g,"\\'")+"')\">"
     +"<i class='ti ti-check'></i> Salvar</button>"
@@ -35866,7 +35870,7 @@ function editarHistorico(idx,nome){
 }
 // Persiste TODO o historico na aba do Sheets (usado por edicao, renovacao e cancelamento)
 async function saveHistoricoAll(){
-  var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento"];
+  var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento","freqSemanal"];
   var rows=(D.historico||[]).map(function(x){return hh.map(function(k){return String(x[k]||"");});});
   await rewriteAba("historico",hh,rows);
 }
@@ -35877,6 +35881,7 @@ async function salvarEdicaoHistorico(idx,nome){
   h.plano=document.getElementById("hepl").value;
   h.valor=+document.getElementById("hev").value||h.valor;
   h.dataRenovacao=document.getElementById("hedr").value;
+  h.freqSemanal=document.getElementById("hefreqsem")?document.getElementById("hefreqsem").value:(h.freqSemanal||"1x");
   // IMPORTANTE: dataEvento é o campo que os Relatórios usam pra decidir em qual mês contar o evento.
   // Sem atualizar aqui, corrigir a data na tela não refletia no relatório.
   if(h.evento==="renovacao")h.dataEvento=h.dataRenovacao||h.dataMatricula||h.dataEvento;
@@ -35984,9 +35989,9 @@ async function saveMat(){
   ensureCaixaMes();
   // Registrar 1ª matrícula no histórico
   if(!D.historico)D.historico=[];
-  var hObj={nome:nome,plano:plano,valor:valor,diaVenc:dv,prof:obj.prof,dataMatricula:data,dataRenovacao:"",vencimento:calcVencContrato(data,plano)||"",evento:"matricula",dataEvento:data};
+  var hObj={nome:nome,plano:plano,valor:valor,diaVenc:dv,prof:obj.prof,dataMatricula:data,dataRenovacao:"",vencimento:calcVencContrato(data,plano)||"",evento:"matricula",dataEvento:data,freqSemanal:obj.freqSemanal||"1x"};
   D.historico.push(hObj);
-  var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento"];
+  var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento","freqSemanal"];
   await push("historico",hh,hh.map(function(k){return String(hObj[k]||"");}));
   await saveMatriculas();
   await saveCaixa();
@@ -36002,10 +36007,10 @@ async function cancelarAluno(nome,fixo){
   if(ei>=0)D.canc[ei]=obj;else D.canc.push(obj);
   var d=getDados(nome);
   if(!D.historico)D.historico=[];
-  var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento"];
+  var hh=["nome","plano","valor","diaVenc","prof","dataMatricula","dataRenovacao","vencimento","evento","dataEvento","freqSemanal"];
   var hObj={nome:nome,plano:d?d.plano:"",valor:d?d.valor:0,diaVenc:d?d.diaVenc:"",prof:d?d.prof:"",
     dataMatricula:(d&&d.dataMatricula)||"",dataRenovacao:"",vencimento:"",
-    evento:"cancelado",dataEvento:hoje};
+    evento:"cancelado",dataEvento:hoje,freqSemanal:(d&&d.freqSemanal)||"1x"};
   D.historico.push(hObj);
   await saveHistoricoAll(); // persiste o evento de cancelamento no historico (sempre, mesmo sem dados completos do plano)
   D.caixa=D.caixa.filter(function(c){return c.nome!==nome||(c.pago===true||c.pago==="true");});
@@ -36112,12 +36117,12 @@ async function confirmarRenovacao(nome){
   if(!temHist&&dataMatAtual){
     D.historico.push({nome:nome,plano:d.plano,valor:d.valor,diaVenc:d.diaVenc,prof:d.prof,
       dataMatricula:dataMatAtual,dataRenovacao:"",vencimento:vencAtual,
-      evento:"matricula",dataEvento:dataMatAtual});
+      evento:"matricula",dataEvento:dataMatAtual,freqSemanal:d.freqSemanal||"1x"});
   }
   // 2) Registrar o NOVO periodo como renovacao (plano/valor/vencimento novos)
   var hObj={nome:nome,plano:novoPlano,valor:novoValor,diaVenc:novoDv,prof:novoProf,
     dataMatricula:novaData,dataRenovacao:novaData,vencimento:calcVencContrato(novaData,novoPlano)||"",
-    evento:"renovacao",dataEvento:novaData};
+    evento:"renovacao",dataEvento:novaData,freqSemanal:novoFreqSem};
   D.historico.push(hObj);
   // Atualizar AF e D.mat com novo plano
   if(af){af.plano=novoPlano;af.valor=novoValor;af.diaVenc=novoDv;af.prof=novoProf;af.desconto=novoDesc;af.dataMatricula=novaData;af.freqSemanal=novoFreqSem;}
