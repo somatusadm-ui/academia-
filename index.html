@@ -33487,6 +33487,7 @@ function todosObj(){
       diasSem:m?m.diasSem:a.diasSem,
       horario:m?m.horario:a.horario,
       prof:m?m.prof:a.prof,
+      freqSemanal:(m?m.freqSemanal:a.freqSemanal)||"1x",
       fixo:true,
       dataMatricula:(m?(m.dataMatricula||m.data):a.dataMatricula)||"",
       desconto:(m?m.desconto:a.desconto)||0,
@@ -33502,6 +33503,7 @@ function todosObj(){
       lista.push({
         nome:m.nome,numero:m.numero||"",plano:m.plano,valor:+m.valor,diaVenc:+m.diaVenc,
         diasSem:m.diasSem,horario:m.horario,prof:m.prof,fixo:false,
+        freqSemanal:m.freqSemanal||"1x",
         dataMatricula:m.dataMatricula||m.data||"",
         desconto:m.desconto||0,promocao:m.promocao||"",
         autorizaImagem:m.autorizaImagem||"",
@@ -33898,7 +33900,7 @@ function restaurarBackupLocal(){
 
 async function _savePagamentosNow(){var h=["id","aluno","data","tabela","desconto","bruto","liquido","forma","plano","banco"];var rows=D.pag.map(function(p){return h.map(function(k){var v=p[k];if(typeof v==="boolean")v=v?'true':'false';return String(v||"");});});await rewriteAba("pagamentos",h,rows);}
 async function _saveCaixaNow(){var h=["nome","valor","plano","dataVenc","pago","dataPag","numDoc","formaPag","diasSem","oculto"];var rows=D.caixa.map(function(c){return h.map(function(k){var v=c[k];if(typeof v==="boolean")v=v?'true':'false';return String(v||"");});});await rewriteAba("caixa",h,rows);}
-async function _saveMatriculasNow(){var h=["nome","numero","data","plano","valor","diaVenc","diasSem","horario","prof","canal","desconto","promocao","dataMatricula","autorizaImagem","bolsista"];var rows=D.mat.map(function(m){return h.map(function(k){return String(m[k]||"");});});await rewriteAba("matriculas",h,rows);}
+async function _saveMatriculasNow(){var h=["nome","numero","data","plano","valor","diaVenc","diasSem","horario","prof","canal","desconto","promocao","dataMatricula","autorizaImagem","bolsista","freqSemanal"];var rows=D.mat.map(function(m){return h.map(function(k){return String(m[k]||"");});});await rewriteAba("matriculas",h,rows);}
 async function _saveCanceladosNow(){var h=["nome","fixo","ativo","data"];var rows=(D.canc||[]).map(function(c){return h.map(function(k){return String(c[k]||"");});});await rewriteAba("cancelados",h,rows);}
 function savePagamentos(){
   if(syncing){console.warn("Ignorando savePagamentos: syncAll em progresso");return;}
@@ -35395,6 +35397,7 @@ function matHtml(){
     +"<div class='fr3'><div class='fi'><label>Dia(s) da semana</label><select id='mds'>"+dOpts+"</select></div>"
     +"<div class='fi'><label>Hor\u00e1rio</label><select id='mh'>"+hOpts+"</select></div>"
     +"<div class='fi'><label>Professora</label><select id='mpr'><option>Amanda</option><option>Nathalia</option><option>Lilian</option></select></div></div>"
+    +"<div class='fr3'><div class='fi'><label>Vezes por semana</label><select id='mfreqsem'><option value='1x'>1x semanal</option><option value='2x'>2x semanal</option><option value='3x'>3x semanal</option><option value='4x'>4x semanal</option><option value='5x'>5x semanal</option></select></div></div>"
     +"<div class='fi' style='margin-bottom:10px'><label>Canal de aquisi\u00e7\u00e3o</label>"
     +"<select id='mc2'><option>Instagram</option><option>Instagram Luli</option><option>Tr\u00e1fego Pago</option><option>Indica\u00e7\u00e3o</option><option>PAC Cl\u00ednica 1</option><option>PAC Cl\u00ednica 2</option><option>Outros</option></select></div>"
     +"<div class='fi' style='margin-bottom:10px'><label>Autoriza uso de imagem?</label>"
@@ -35795,6 +35798,9 @@ function editarMatricula(nome){
     +"<div class='fr3'><div class='fi'><label>Dia(s) da semana</label><select id='eds'>"+dOpts+"</select></div>"
     +"<div class='fi'><label>Hor\u00e1rio</label><select id='eh'>"+hOpts+"</select></div>"
     +"<div class='fi'><label>Desconto (R$)</label><input type='number' id='edes' value='"+(d.desconto||0)+"' step='0.01'></div></div>"
+    +"<div class='fr3'><div class='fi'><label>Vezes por semana</label><select id='efreqsem'>"
+    +["1x","2x","3x","4x","5x"].map(function(f){return "<option value='"+f+"'"+(f===(d.freqSemanal||"1x")?" selected":"")+">"+f+" semanal</option>";}).join("")
+    +"</select></div></div>"
     +"<div class='fi' style='margin-bottom:12px'><label>A\u00e7\u00e3o promocional</label><input type='text' id='epro' value='"+(d.promocao||"")+"' placeholder='Ex: Promo maio'></div>"
     +"<div class='fi' style='margin-bottom:12px'><label>Canal de aquisi\u00e7\u00e3o</label><select id='ecanal'>"
     +["","Instagram","Instagram Luli","Tr\u00e1fego Pago","Indica\u00e7\u00e3o","PAC Cl\u00ednica 1","PAC Cl\u00ednica 2","Outros"].map(function(op){
@@ -35891,6 +35897,7 @@ async function salvarEdicaoMat(nome){
   var plano=document.getElementById("epl").value,valor=+document.getElementById("ev").value||0;
   var diaVenc=+document.getElementById("edv").value||1,diasSem=document.getElementById("eds").value;
   var horario=document.getElementById("eh").value,prof=document.getElementById("epr").value;
+  var freqSemanal=document.getElementById("efreqsem")?document.getElementById("efreqsem").value:"1x";
   var desconto=+document.getElementById("edes").value||0,promocao=document.getElementById("epro").value;
   var novaDataMat=document.getElementById("edm")?document.getElementById("edm").value:"";
   var novoNumero=document.getElementById("ednu")?document.getElementById("ednu").value:"";
@@ -35901,7 +35908,7 @@ async function salvarEdicaoMat(nome){
   var af=AF.find(function(a){return a.nome===nome;});
   if(af){
     af.plano=plano;af.valor=valor;af.diaVenc=diaVenc;af.diasSem=diasSem;af.horario=horario;
-    af.prof=prof;af.desconto=desconto;af.promocao=promocao;af.autorizaImagem=autorizaImagem;af.bolsista=bolsista;
+    af.prof=prof;af.desconto=desconto;af.promocao=promocao;af.autorizaImagem=autorizaImagem;af.bolsista=bolsista;af.freqSemanal=freqSemanal;
     if(canalEdit)af.canal=canalEdit;
     if(novaDataMat)af.dataMatricula=novaDataMat;
     if(novoNumero)af.numero=novoNumero;
@@ -35910,7 +35917,7 @@ async function salvarEdicaoMat(nome){
   var mat=D.mat.find(function(m){return m.nome===nome;});
   if(mat){
     mat.plano=plano;mat.valor=valor;mat.diaVenc=diaVenc;mat.diasSem=diasSem;mat.horario=horario;
-    mat.prof=prof;mat.desconto=desconto;mat.promocao=promocao;mat.autorizaImagem=autorizaImagem;mat.bolsista=bolsista;
+    mat.prof=prof;mat.desconto=desconto;mat.promocao=promocao;mat.autorizaImagem=autorizaImagem;mat.bolsista=bolsista;mat.freqSemanal=freqSemanal;
     if(canalEdit)mat.canal=canalEdit;
     if(novaDataMat){mat.dataMatricula=novaDataMat;mat.data=novaDataMat;}
     if(novoNumero)mat.numero=novoNumero;
@@ -35918,7 +35925,7 @@ async function salvarEdicaoMat(nome){
     var dataSalva=novaDataMat||(af?af.dataMatricula:"")||"";
     D.mat.push({nome:nome,numero:novoNumero||(af?af.numero:"")||"",data:dataSalva,plano:plano,valor:valor,
       diaVenc:diaVenc,diasSem:diasSem,horario:horario,prof:prof,canal:canalEdit||"",
-      desconto:desconto,promocao:promocao,dataMatricula:dataSalva,autorizaImagem:autorizaImagem,bolsista:bolsista});
+      desconto:desconto,promocao:promocao,dataMatricula:dataSalva,autorizaImagem:autorizaImagem,bolsista:bolsista,freqSemanal:freqSemanal});
   }
 
   D.caixa=gerarCaixa();
@@ -35965,7 +35972,7 @@ async function saveMat(){
   var bolsista=!!(document.getElementById("mbols")&&document.getElementById("mbols").checked);
   if(!nome||!data){alert2("ma","Preencha nome e data.",false);return;}
   if(!valor&&!bolsista){alert2("ma","Preencha o valor.",false);return;}
-  var obj={nome:nome,numero:document.getElementById("mnu").value,data:data,plano:plano,valor:bolsista?0:valor,diaVenc:dv,diasSem:document.getElementById("mds").value,horario:document.getElementById("mh").value,prof:document.getElementById("mpr").value,canal:document.getElementById("mc2").value,desconto:bolsista?0:desconto,promocao:promocao,dataMatricula:data,autorizaImagem:document.getElementById("mimg").value,bolsista:bolsista};
+  var obj={nome:nome,numero:document.getElementById("mnu").value,data:data,plano:plano,valor:bolsista?0:valor,diaVenc:dv,diasSem:document.getElementById("mds").value,horario:document.getElementById("mh").value,prof:document.getElementById("mpr").value,canal:document.getElementById("mc2").value,desconto:bolsista?0:desconto,promocao:promocao,dataMatricula:data,autorizaImagem:document.getElementById("mimg").value,bolsista:bolsista,freqSemanal:document.getElementById("mfreqsem")?document.getElementById("mfreqsem").value:"1x"};
   D.mat.push(obj);
   if(bolsista){
     await saveMatriculas();
@@ -36073,6 +36080,9 @@ function renovarMatricula(nome){
     +"<div class='fi'><label>Dia vencimento</label><input type='number' id='rndv' value='"+(d.diaVenc||1)+"' min='1' max='31'></div></div>"
     +"<div class='fr'><div class='fi'><label>Professora</label><select id='rnpr'><option"+(d.prof==="Amanda"?" selected":"")+">Amanda</option><option"+(d.prof==="Nathalia"?" selected":"")+">Nathalia</option></select></div>"
     +"<div class='fi'><label>Desconto (R$)</label><input type='number' id='rndes' value='"+(d.desconto||0)+"' step='0.01'></div></div>"
+    +"<div class='fr'><div class='fi'><label>Vezes por semana</label><select id='rnfreqsem'>"
+    +["1x","2x","3x","4x","5x"].map(function(f){return "<option value='"+f+"'"+(f===(d.freqSemanal||"1x")?" selected":"")+">"+f+" semanal</option>";}).join("")
+    +"</select></div></div>"
     +"<div style='display:flex;gap:8px;margin-top:4px'>"
     +"<button class='btn bp' style='flex:1;justify-content:center' onclick=\"confirmarRenovacao('"+nome.replace(/'/g,"\\'")+"')\">"
     +"<i class='ti ti-check'></i> Confirmar renovação</button>"
@@ -36088,6 +36098,7 @@ async function confirmarRenovacao(nome){
   var novoDv=+document.getElementById("rndv").value||d.diaVenc;
   var novoProf=document.getElementById("rnpr").value;
   var novoDesc=+document.getElementById("rndes").value||0;
+  var novoFreqSem=document.getElementById("rnfreqsem")?document.getElementById("rnfreqsem").value:(d.freqSemanal||"1x");
   var mat=D.mat.find(function(m){return m.nome===nome;});
   var af=AF.find(function(a){return a.nome===nome;});
   var dataMatAtual=(mat?(mat.dataMatricula||mat.data):"")
@@ -36109,14 +36120,14 @@ async function confirmarRenovacao(nome){
     evento:"renovacao",dataEvento:novaData};
   D.historico.push(hObj);
   // Atualizar AF e D.mat com novo plano
-  if(af){af.plano=novoPlano;af.valor=novoValor;af.diaVenc=novoDv;af.prof=novoProf;af.desconto=novoDesc;af.dataMatricula=novaData;}
+  if(af){af.plano=novoPlano;af.valor=novoValor;af.diaVenc=novoDv;af.prof=novoProf;af.desconto=novoDesc;af.dataMatricula=novaData;af.freqSemanal=novoFreqSem;}
   if(mat){
     mat.plano=novoPlano;mat.valor=novoValor;mat.diaVenc=novoDv;mat.prof=novoProf;
-    mat.desconto=novoDesc;mat.dataMatricula=novaData;mat.data=novaData;
+    mat.desconto=novoDesc;mat.dataMatricula=novaData;mat.data=novaData;mat.freqSemanal=novoFreqSem;
   } else {
     D.mat.push({nome:nome,numero:(af?af.numero:"")||"",data:novaData,plano:novoPlano,valor:novoValor,
       diaVenc:novoDv,diasSem:d.diasSem||"",horario:d.horario||"",prof:novoProf,canal:"",
-      desconto:novoDesc,promocao:"",dataMatricula:novaData});
+      desconto:novoDesc,promocao:"",dataMatricula:novaData,freqSemanal:novoFreqSem});
   }
   D.caixa=gerarCaixa();
   ensureCaixaMes();
@@ -37306,6 +37317,18 @@ function relHtml(){
   var plSemestral=atvList.filter(function(a){return(a.plano||"").toLowerCase()==="semestral";}).length;
   var plAnual=atvList.filter(function(a){return(a.plano||"").toLowerCase()==="anual";}).length;
   var totalAtivos=atvList.length;
+  var freq1=atvList.filter(function(a){return(a.freqSemanal||"1x")==="1x";}).length;
+  var freq2=atvList.filter(function(a){return a.freqSemanal==="2x";}).length;
+  var freq3=atvList.filter(function(a){return a.freqSemanal==="3x";}).length;
+  var freq4=atvList.filter(function(a){return a.freqSemanal==="4x";}).length;
+  var freq5=atvList.filter(function(a){return a.freqSemanal==="5x";}).length;
+  var freqPartes=[];
+  if(freq1>0)freqPartes.push(freq1+" aluno"+(freq1===1?"":"s")+" 1x semanal");
+  if(freq2>0)freqPartes.push(freq2+" aluno"+(freq2===1?"":"s")+" 2x semanal");
+  if(freq3>0)freqPartes.push(freq3+" aluno"+(freq3===1?"":"s")+" 3x semanal");
+  if(freq4>0)freqPartes.push(freq4+" aluno"+(freq4===1?"":"s")+" 4x semanal");
+  if(freq5>0)freqPartes.push(freq5+" aluno"+(freq5===1?"":"s")+" 5x semanal");
+  var freqBreakdownTxt=freqPartes.length?freqPartes.join(" &middot; "):"alunos";
   var mov=_movimentacoesMes(_ra+"-"+_rm);
 
   return "<div style='margin-bottom:16px'><div class='fi' style='max-width:200px'><label>Mês do Relatório "+debugMeses+"</label><select onchange='setMesRel(this.value)'>"+opts_rel_html+"</select></div></div>"
@@ -37324,18 +37347,19 @@ function relHtml(){
       +"</tbody></table></div></details>":"")
     +"<p style='font-size:11px;color:var(--mt);margin:10px 0 0'><i class='ti ti-info-circle'></i> \"Servi\u00e7os Extras\" = alunos j\u00e1 matriculados que passaram a fazer tamb\u00e9m outra modalidade (ex: Gin\u00e1stica + Karat\u00ea). N\u00e3o conta como matr\u00edcula nova.</p>"
     +"</div>"
-    // Dashboard de planos + financeiro — apenas Gestora
+    // Dashboard de planos — visível para Gestora e Secretária; financeiro fica restrito à Gestora logo abaixo
+    +"<div class='card' style='margin-bottom:16px;border-top:3px solid var(--brand)'>"
+    +"<p class='ct'><i class='ti ti-id-badge'></i> Alunos Matriculados por Plano <span style='font-size:11px;color:var(--mt);font-weight:400;margin-left:4px'>(gerado automaticamente)</span></p>"
+    +"<div class='kg' style='grid-template-columns:repeat(5,1fr);margin-bottom:0'>"
+    +"<div class='kpi'><div class='ka' style='background:var(--brand)'></div><p class='kl'>Total Ativos</p><p class='kv' style='color:var(--brand)'>"+totalAtivos+"</p><p class='ks'>"+freqBreakdownTxt+"</p></div>"
+    +"<div class='kpi'><div class='ka' style='background:var(--gn)'></div><p class='kl'>Mensal</p><p class='kv' style='color:var(--gn)'>"+plMensal+"</p><p class='ks'>alunos</p></div>"
+    +"<div class='kpi'><div class='ka' style='background:var(--am)'></div><p class='kl'>Trimestral</p><p class='kv' style='color:var(--am)'>"+plTrimestral+"</p><p class='ks'>alunos</p></div>"
+    +"<div class='kpi'><div class='ka' style='background:var(--pu)'></div><p class='kl'>Semestral</p><p class='kv' style='color:var(--pu)'>"+plSemestral+"</p><p class='ks'>alunos</p></div>"
+    +"<div class='kpi'><div class='ka' style='background:var(--tl)'></div><p class='kl'>Anual</p><p class='kv' style='color:var(--tl)'>"+plAnual+"</p><p class='ks'>alunos</p></div>"
+    +"</div></div>"
+    // Dashboard financeiro — apenas Gestora
     +(user.role==="Gestora"
-      ? "<div class='card' style='margin-bottom:16px;border-top:3px solid var(--brand)'>"
-        +"<p class='ct'><i class='ti ti-id-badge'></i> Alunos Matriculados por Plano <span style='font-size:11px;color:var(--mt);font-weight:400;margin-left:4px'>(gerado automaticamente)</span></p>"
-        +"<div class='kg' style='grid-template-columns:repeat(5,1fr);margin-bottom:0'>"
-        +"<div class='kpi'><div class='ka' style='background:var(--brand)'></div><p class='kl'>Total Ativos</p><p class='kv' style='color:var(--brand)'>"+totalAtivos+"</p><p class='ks'>alunos</p></div>"
-        +"<div class='kpi'><div class='ka' style='background:var(--gn)'></div><p class='kl'>Mensal</p><p class='kv' style='color:var(--gn)'>"+plMensal+"</p><p class='ks'>alunos</p></div>"
-        +"<div class='kpi'><div class='ka' style='background:var(--am)'></div><p class='kl'>Trimestral</p><p class='kv' style='color:var(--am)'>"+plTrimestral+"</p><p class='ks'>alunos</p></div>"
-        +"<div class='kpi'><div class='ka' style='background:var(--pu)'></div><p class='kl'>Semestral</p><p class='kv' style='color:var(--pu)'>"+plSemestral+"</p><p class='ks'>alunos</p></div>"
-        +"<div class='kpi'><div class='ka' style='background:var(--tl)'></div><p class='kl'>Anual</p><p class='kv' style='color:var(--tl)'>"+plAnual+"</p><p class='ks'>alunos</p></div>"
-        +"</div></div>"
-        +"<div class='g2'>"
+      ? "<div class='g2'>"
         +"<div class='card c0'><p class='ct'><i class='ti ti-chart-bar'></i> Resumo financeiro</p>"
         +"<div class='sr'><span class='sl'>Faturamento Bruto</span><span class='sv' style='color:var(--gn)'>"+BRL(t.b)+"</span></div>"
         +"<div class='sr'><span class='sl'>Faturamento Líquido</span><span class='sv' style='color:var(--brand2)'>"+BRL(t.l)+"</span></div>"
