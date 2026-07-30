@@ -35355,10 +35355,18 @@ function _modalidadeInfo(prof){
 function matHtml(){
   var dOpts=DIAS.map(function(d){return "<option>"+d+"</option>";}).join("");
   var hOpts=HORAS.map(function(h){return "<option>"+h+"</option>";}).join("");
-  // Lista unificada: fixos + novos, ordenada por nome
+  // Lista unificada: fixos + novos, ordenada por nº de matrícula (crescente)
   var todos=todosObj().filter(function(a){return!eCanc(a.nome)&&!a.bolsista;});
   var todosBols=todosObj().filter(function(a){return!eCanc(a.nome)&&a.bolsista;});
-  todos.sort(function(a,b){return a.nome<b.nome?-1:1;});
+  todos.sort(function(a,b){
+    var na=parseInt((a.numero||"").replace(/\D/g,""),10);
+    var nb=parseInt((b.numero||"").replace(/\D/g,""),10);
+    var naOk=!isNaN(na),nbOk=!isNaN(nb);
+    if(naOk&&nbOk)return na-nb;
+    if(naOk&&!nbOk)return -1; // quem tem nº vem antes de quem não tem
+    if(!naOk&&nbOk)return 1;
+    return a.nome<b.nome?-1:1; // sem nº em nenhum dos dois: cai pro nome
+  });
   var novosNomes=D.mat.map(function(m){return m.nome;});
   var rowsTodos=todos.map(function(a){
     var isNovo=novosNomes.indexOf(a.nome)>=0;
