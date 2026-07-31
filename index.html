@@ -37155,9 +37155,14 @@ async function gerarDeclaracaoFaturamentoWord(){
     var mesAno=mesAtualRel;
     if(!mesAno){alert("Selecione um mês no Relatório antes de gerar a declaração.");return;}
     var d=_dadosDeclaracaoFaturamento(mesAno);
-    var FONT="Helvetica Neue";
-    function p(opts){return new docx.Paragraph(opts);}
-    function t(texto,opts){return new docx.TextRun(Object.assign({text:texto,font:FONT,size:22},opts||{}));}
+    var FONT="Arial";
+    function p(opts){
+      opts=opts||{};
+      var spacingPadrao={line:360,lineRule:docx.LineRuleType.AUTO}; // 1,5 entre linhas
+      var spacingFinal=Object.assign({},spacingPadrao,opts.spacing||{});
+      return new docx.Paragraph(Object.assign({alignment:docx.AlignmentType.JUSTIFIED},opts,{spacing:spacingFinal}));
+    }
+    function t(texto,opts){return new docx.TextRun(Object.assign({text:texto,font:FONT,size:24},opts||{}));}
     var hoje=new Date();
     var mesesNomesCompletos=["","janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
     var dataEmissaoTxt=hoje.getDate()+" de "+mesesNomesCompletos[hoje.getMonth()+1]+" de "+hoje.getFullYear();
@@ -37182,12 +37187,12 @@ async function gerarDeclaracaoFaturamentoWord(){
 
     function blocoAssinatura(){
       return [
-        p({spacing:{before:300,after:100},children:[t("Botucatu/SP, "+dataEmissaoTxt+".")]}),
-        p({spacing:{before:200,after:0},children:[new docx.ImageRun({type:"jpg",data:sigBytes,transformation:{width:188,height:95}})]}),
-        p({children:[t("____________________________________")]}),
-        p({children:[t(DADOS_FRANQUIA.signatarioNome,{bold:true})]}),
-        p({children:[t(DADOS_FRANQUIA.signatarioCargo)]}),
-        p({children:[t(DADOS_FRANQUIA.signatarioFuncao)]}),
+        p({alignment:docx.AlignmentType.CENTER,spacing:{before:300,after:100},children:[t("Botucatu/SP, "+dataEmissaoTxt+".")]}),
+        p({alignment:docx.AlignmentType.CENTER,spacing:{before:200,after:0},children:[new docx.ImageRun({type:"jpg",data:sigBytes,transformation:{width:188,height:95}})]}),
+        p({alignment:docx.AlignmentType.CENTER,children:[t("____________________________________")]}),
+        p({alignment:docx.AlignmentType.CENTER,children:[t(DADOS_FRANQUIA.signatarioNome,{bold:true})]}),
+        p({alignment:docx.AlignmentType.CENTER,children:[t(DADOS_FRANQUIA.signatarioCargo)]}),
+        p({alignment:docx.AlignmentType.CENTER,children:[t(DADOS_FRANQUIA.signatarioFuncao)]}),
       ];
     }
     function celula(texto,opts){
@@ -37398,8 +37403,12 @@ function relHtml(){
         +"<button class='btn' style='background:#0b1e35;color:#fff;border:none' onclick='exportPDFContador()'><i class='ti ti-calculator'></i> Exportação para o Contador</button>"
         +"<button class='btn' onclick='exportCSV()'><i class='ti ti-file-spreadsheet'></i> CSV (Excel)</button>"
         +"</div></div>"
-      : // Secretária: PDF Simplificado + Movimentações
-        "<div class='card'><p class='ct'><i class='ti ti-download'></i> Exportar</p>"
+      : // Secretária: Declaração (Word) + PDF Simplificado + Movimentações
+        "<div class='card c0' style='border-top:3px solid var(--brand2);margin-bottom:16px'><p class='ct'><i class='ti ti-file-type-doc'></i> Declaração de Faturamento (Word)</p>"
+        +"<p style='font-size:12px;color:var(--mt);margin:-6px 0 14px'>Gera o documento completo — declaração + relatório financeiro do mês selecionado acima — já preenchido com os dados do sistema, pronto para enviar à franquia.</p>"
+        +"<button class='btn bp' onclick='gerarDeclaracaoFaturamentoWord()'><i class='ti ti-download'></i> Gerar Declaração — "+mesAtualRel+"</button>"
+        +"</div>"
+        +"<div class='card'><p class='ct'><i class='ti ti-download'></i> Exportar</p>"
         +"<p style='font-size:12px;color:var(--mt);margin-bottom:12px'>Gere o relatório de faturamento ou de movimentações do mês selecionado:</p>"
         +"<div style='display:flex;gap:10px;flex-wrap:wrap'>"
         +"<button class='btn' style='background:var(--pl);color:var(--pu);border-color:var(--pl)' onclick='exportPDFSimplificado()'><i class='ti ti-file-analytics'></i> PDF Simplificado (só faturamento)</button>"
