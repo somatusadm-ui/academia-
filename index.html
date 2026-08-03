@@ -37163,6 +37163,7 @@ async function gerarDeclaracaoFaturamentoWord(){
       return new docx.Paragraph(Object.assign({alignment:docx.AlignmentType.JUSTIFIED},opts,{spacing:spacingFinal}));
     }
     function t(texto,opts){return new docx.TextRun(Object.assign({text:texto,font:FONT,size:24},opts||{}));}
+    function tab(){return new docx.TextRun({children:[new docx.Tab()],font:FONT,size:24});}
     var hoje=new Date();
     var mesesNomesCompletos=["","janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
     var dataEmissaoTxt=hoje.getDate()+" de "+mesesNomesCompletos[hoje.getMonth()+1]+" de "+hoje.getFullYear();
@@ -37240,26 +37241,27 @@ async function gerarDeclaracaoFaturamentoWord(){
           p({alignment:docx.AlignmentType.CENTER,spacing:{after:100},children:[t("DECLARAÇÃO DE FATURAMENTO – COMPETÊNCIA "+d.nomeMes.toUpperCase()+" "+d.ano,{bold:true,size:24})]}),
           p({alignment:docx.AlignmentType.CENTER,spacing:{after:300},children:[t(DADOS_FRANQUIA.unidade,{bold:true,size:24})]}),
           p({spacing:{after:200},children:[
+            tab(),
             t("Declaramos, para os devidos fins, que a empresa "),
             t(DADOS_FRANQUIA.razaoSocial,{bold:true}),
             t(", inscrita no CNPJ nº "),
             t(DADOS_FRANQUIA.cnpj,{bold:true}),
             t(", obteve faturamento bruto no valor total de "+BRL(d.faturamentoBruto)+" ("+numeroPorExtenso(d.faturamentoBruto)+"), referente ao período de "+d.periodoIni+" à "+d.periodoFim+".")
           ]}),
-          p({spacing:{after:200},children:[t("O valor informado corresponde ao faturamento bruto das atividades realizadas no período e será utilizado como base para apuração e cálculo dos royalties devidos à franqueadora, conforme disposições previstas no contrato de franquia e no Manual da Franquia.")]}),
-          p({spacing:{after:200},children:[t("As informações detalhadas que compõem o faturamento declarado encontram-se descritas no Relatório Financeiro Mensal apresentado a seguir.")]}),
-          p({spacing:{after:200},children:[t("Declaramos que os dados acima são verdadeiros e refletem fielmente a movimentação financeira da unidade no período informado.")]}),
-          p({spacing:{after:0},children:[t("Por ser verdade, firmamos a presente declaração.")]}),
+          p({spacing:{after:200},children:[tab(),t("O valor informado corresponde ao faturamento bruto das atividades realizadas no período e será utilizado como base para apuração e cálculo dos royalties devidos à franqueadora, conforme disposições previstas no contrato de franquia e no Manual da Franquia.")]}),
+          p({spacing:{after:200},children:[tab(),t("As informações detalhadas que compõem o faturamento declarado encontram-se descritas no Relatório Financeiro Mensal apresentado a seguir.")]}),
+          p({spacing:{after:200},children:[tab(),t("Declaramos que os dados acima são verdadeiros e refletem fielmente a movimentação financeira da unidade no período informado.")]}),
+          p({spacing:{after:0},children:[tab(),t("Por ser verdade, firmamos a presente declaração.")]}),
           ...blocoAssinatura(),
 
           p({pageBreakBefore:true,children:[t("")]}),
           p({alignment:docx.AlignmentType.CENTER,spacing:{after:300},children:[t("RELATÓRIO FINANCEIRO – COMPETÊNCIA "+d.nomeMes.toUpperCase()+"/"+d.ano,{bold:true,size:24})]}),
 
           p({spacing:{after:100},children:[t("1. Demonstrativo Analítico do Faturamento Bruto",{bold:true})]}),
-          p({spacing:{after:200},children:[t("O presente Relatório Financeiro Mensal refere-se à competência de "+d.nomeMes+" de "+d.ano+" e atende à obrigatoriedade prevista no Manual da Franquia, contemplando o detalhamento das receitas, o número de alunos atendidos e demais métricas relevantes para a apuração dos royalties devidos à franqueadora.")]}),
+          p({spacing:{after:200},children:[tab(),t("O presente Relatório Financeiro Mensal refere-se à competência de "+d.nomeMes+" de "+d.ano+" e atende à obrigatoriedade prevista no Manual da Franquia, contemplando o detalhamento das receitas, o número de alunos atendidos e demais métricas relevantes para a apuração dos royalties devidos à franqueadora.")]}),
           p({spacing:{after:200}}),
           tabela,
-          p({spacing:{before:200,after:300},children:[t("Declara-se que os valores apresentados refletem fielmente a movimentação financeira do período informado, não havendo omissões ou distorções quanto às receitas auferidas.")]}),
+          p({spacing:{before:200,after:300},children:[tab(),t("Declara-se que os valores apresentados refletem fielmente a movimentação financeira do período informado, não havendo omissões ou distorções quanto às receitas auferidas.")]}),
 
           p({spacing:{after:100},children:[t("2. Demonstrativo de Alunos – Competência "+nomeMesCap+"/"+d.ano,{bold:true})]}),
           p({children:[t("Matrículas realizadas em "+d.nomeMes+": "+String(d.matriculasNovas).padStart(2,"0"))]}),
@@ -37273,9 +37275,9 @@ async function gerarDeclaracaoFaturamentoWord(){
           p({spacing:{after:300},children:[t("Alunos ativos total: "+String(d.totalAtivos).padStart(2,"0"),{bold:true})]}),
 
           p({spacing:{after:100},children:[t("3. Consolidação e Encerramento",{bold:true})]}),
-          p({spacing:{after:200},children:[t("O faturamento bruto total apurado no período corresponde ao valor de "+BRL(d.faturamentoBruto)+" ("+numeroPorExtenso(d.faturamentoBruto)+"), bem como o número total de alunos atendidos na competência, conforme demonstrado na tabela acima, o qual coincide integralmente com o montante declarado na Declaração de Faturamento referente à competência "+d.nomeMes+" de "+d.ano+".")]}),
-          p({spacing:{after:200},children:[t("O presente relatório é emitido para fins de conferência, validação e apuração dos royalties contratuais devidos à franqueadora.")]}),
-          p({children:[t("Por ser verdade, firmamos a presente declaração.")]}),
+          p({spacing:{after:200},children:[tab(),t("O faturamento bruto total apurado no período corresponde ao valor de "+BRL(d.faturamentoBruto)+" ("+numeroPorExtenso(d.faturamentoBruto)+"), bem como o número total de alunos atendidos na competência, conforme demonstrado na tabela acima, o qual coincide integralmente com o montante declarado na Declaração de Faturamento referente à competência "+d.nomeMes+" de "+d.ano+".")]}),
+          p({spacing:{after:200},children:[tab(),t("O presente relatório é emitido para fins de conferência, validação e apuração dos royalties contratuais devidos à franqueadora.")]}),
+          p({children:[tab(),t("Por ser verdade, firmamos a presente declaração.")]}),
           ...blocoAssinatura(),
 
           p({spacing:{before:400},alignment:docx.AlignmentType.CENTER,children:[t("Gerado automático pelo sistema online GêDois Btu",{italics:true,size:18,color:"999999"})]}),
@@ -37456,6 +37458,7 @@ function exportPDFContador(){
   h+="<table class='pdf-tbl'><tbody>";
   h+="<tr><td>Nicoli</td><td style='font-weight:700'>"+BRL(F.nicoli.total)+"</td></tr>";
   h+="<tr><td>Amanda</td><td style='font-weight:700'>"+BRL(F.amanda.total)+"</td></tr>";
+  h+="<tr><td>Lilian</td><td style='font-weight:700'>"+BRL(F.lilian.total)+"</td></tr>";
   h+="<tr><td style='font-weight:800'>Total da folha</td><td style='font-weight:800'>"+BRL(F.totalGeral)+"</td></tr>";
   h+="</tbody></table>";
 
@@ -38080,9 +38083,10 @@ function agendaHtml(){
   html+="</div>";
   html+="<div class='fr3' style='margin-bottom:10px'>";
   html+="<div class='fi'><label>Data</label><input type='date' id='ag-data' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'></div>";
-  html+="<div class='fi'><label>Hora</label><select id='ag-hora' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value=''>Selecione...</option>";
+  html+="<div class='fi'><label>Hora</label><select id='ag-hora' onchange='toggleHoraCustomAgenda(this.value)' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value=''>Selecione...</option>";
   for(var h=8;h<20;h++){for(var m=0;m<60;m+=30){html+="<option value='"+String(h).padStart(2,'0')+":"+String(m).padStart(2,'0')+"'>"+String(h).padStart(2,'0')+":"+String(m).padStart(2,'0')+"</option>";}}
-  html+="</select></div>";
+  html+="<option value='outro'>Outro hor\u00e1rio (digitar)</option>";
+  html+="</select><input type='time' id='ag-hora-custom' style='display:none;margin-top:6px;font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'></div>";
   html+="<div class='fi'><label>Reagendamento</label><select id='ag-reagendado' style='font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)'><option value='nao'>Não</option><option value='sim'>Sim</option></select></div>";
   html+="</div>";
   html+="<div class='fr3' style='margin-bottom:10px'>";
@@ -38163,11 +38167,18 @@ function toggleTipoAgenda(tipo){
   document.getElementById("ag-exp-div").style.display=tipo==="experimental"?"block":"none";
 }
 
+function toggleHoraCustomAgenda(v){
+  var custom=document.getElementById("ag-hora-custom");
+  if(v==="outro"){custom.style.display="block";custom.focus();}
+  else{custom.style.display="none";custom.value="";}
+}
 function limparFormAgenda(){
   document.getElementById("ag-tipo").value="regular";
   document.getElementById("ag-aluno").value="";
   document.getElementById("ag-data").value="";
   document.getElementById("ag-hora").value="";
+  document.getElementById("ag-hora-custom").value="";
+  document.getElementById("ag-hora-custom").style.display="none";
   document.getElementById("ag-duracao").value="60";
   document.getElementById("ag-prof").value="Amanda";
   document.getElementById("ag-freq").value="avulso";
@@ -38184,6 +38195,7 @@ async function adicionarAulaAgenda(){
   var nomeExibir=reagendado?(nomeOriginal+" REAGENDADO"):nomeOriginal;
   var data=document.getElementById("ag-data").value;
   var hora=document.getElementById("ag-hora").value;
+  if(hora==="outro")hora=document.getElementById("ag-hora-custom").value;
   var duracao=parseInt(document.getElementById("ag-duracao").value)||60;
   var prof=document.getElementById("ag-prof").value;
   var freq=document.getElementById("ag-freq").value;
@@ -40525,12 +40537,13 @@ function _wRun(text,opts){
   var rpr="<w:rPr><w:rFonts w:ascii=\"Arial\" w:hAnsi=\"Arial\" w:cs=\"Arial\"/>"+(opts.bold?"<w:b/>":"")+"<w:sz w:val=\""+sz+"\"/><w:szCs w:val=\""+sz+"\"/></w:rPr>";
   return "<w:r>"+rpr+"<w:t xml:space=\"preserve\">"+escXml(text)+"</w:t></w:r>";
 }
-function _wPara(runsXml,align,spacingAfter){
-  var pPr="<w:pPr>"+(align?("<w:jc w:val=\""+align+"\"/>"):"")+"<w:spacing w:after=\""+(spacingAfter!=null?spacingAfter:120)+"\"/></w:pPr>";
+function _wPara(runsXml,align,spacingAfter,line150){
+  var spacAttrs="w:after=\""+(spacingAfter!=null?spacingAfter:120)+"\""+(line150?" w:line=\"360\" w:lineRule=\"auto\"":"");
+  var pPr="<w:pPr>"+(align?("<w:jc w:val=\""+align+"\"/>"):"")+"<w:spacing "+spacAttrs+"/></w:pPr>";
   return "<w:p>"+pPr+runsXml+"</w:p>";
 }
 function _campoPara(label,valor){
-  return _wPara(_wRun(label+": ",{bold:true})+_wRun(valor||""),null,40);
+  return _wPara(_wRun(label+": ",{bold:true,size:26})+_wRun(valor||"",{size:26}),null,40,true);
 }
 async function exportarFeedbackWord(alunoParam,textoParam){
   var aluno=alunoParam||prontAluno;
@@ -40556,12 +40569,16 @@ async function exportarFeedbackWord(alunoParam,textoParam){
   if(servicosFb)corpo+=_campoPara("Serviços",servicosFb);
   corpo+=_wPara("",null,200);
 
-  corpo+=_wPara(_wRun("RELATÓRIO DE EVOLUÇÃO DO DESENVOLVIMENTO",{bold:true,size:26}),"center",200);
+  corpo+=_wPara(_wRun("RELATÓRIO DE EVOLUÇÃO DO DESENVOLVIMENTO",{bold:true,size:26}),"center",200,true);
 
   corpo+=_wPara(_wRun("Botucatu, "+dataPorExtenso(hojeIso)+"."),"right",300);
 
   String(texto).split(/\r?\n/).forEach(function(linha){
-    corpo+=_wPara(_wRun(linha),null,120);
+    if(linha.trim()===""){
+      corpo+=_wPara("",null,160,true);
+    }else{
+      corpo+=_wPara("<w:r><w:tab/></w:r>"+_wRun(linha,{size:24}),"both",160,true);
+    }
   });
 
   corpo+=_wPara("",null,300);
@@ -41150,9 +41167,17 @@ function gerarPDFNaoFecharamMes(){
 
 // ===== PONTO CLT (exclusivo do login Catarina/Gestora) =====
 var FUNC_PONTO=["Nicoli","Amanda"];
+var FUNC_SALARIO=["Nicoli","Amanda","Lilian"]; // Lilian entra só no controle de Salário (sem Ponto CLT)
 var mesAtualPonto=null,funcPontoSel="Nicoli",pontoEditId=null,pontoSubTab="ponto";
 var PONTO_H=["id","func","data","tipo","entMin","salMin","retMin","saiMin","qtdMin","obs","status","origem","geo"];
-var SAL_H=["id","func","mes","dataPagamento","holerite","valeDias","valeValorUnit","salarioFixo","aulasExtrasQtd","aulasExtrasValorUnit","aulasExpQtd","aulasExpValorUnit","descDiasQtd","descDiasValorUnit","descExtraDesc","descExtraValor"];
+var SAL_H=["id","func","mes","dataPagamento","holerite","valeDias","valeValorUnit","salarioFixo","aulasExtrasQtd","aulasExtrasValorUnit","aulasExpQtd","aulasExpValorUnit","descDiasQtd","descDiasValorUnit","descExtraDesc","descExtraValor","comissaoMatriculaQtd"];
+// Comiss\u00e3o de matr\u00edcula (Nicoli): 1 a 4 matr\u00edculas = R$10/matr\u00edcula; 5 ou mais = valor fixo de R$100.
+function _comissaoMatriculaValor(qtd){
+  qtd=Math.max(0,Math.round(qtd));
+  if(qtd<=0)return 0;
+  if(qtd<=4)return qtd*10;
+  return 100;
+}
 var _salAlertMsg=null; // {ok:bool,msg:string} — sobrevive ao refreshContent para mostrar o resultado real do salvamento
 function setPontoSubTab(v){pontoSubTab=v;refreshContent();}
 var PONTO_TIPO_LBL={normal:"Registro de ponto",atestado_dia:"Atestado (dia inteiro)",atestado_horas:"Atestado (horas)",falta_abonada_dia:"Falta abonada (dia inteiro)",falta_abonada_horas:"Falta abonada (horas)",falta_dia:"Falta n\u00e3o justificada (dia)",falta_horas:"Falta n\u00e3o justificada (horas)",feriado:"Feriado"};
@@ -41235,15 +41260,17 @@ function pontoHtml(){
   var isCatP=user.role==="Gestora";
   var isSecP=user.role==="Secretaria";
   var isProfP=user.role==="Professora";
+  var souLilian=isProfP&&user.name==="Professora Lilian"; // Lilian n\u00e3o bate ponto, s\u00f3 tem Sal\u00e1rio
   var podeEditar=isCatP;
   if(isSecP)funcPontoSel="Nicoli";
-  if(isProfP)funcPontoSel="Amanda";
-  if(!pontoSubTab)pontoSubTab="ponto";
-  if(!isCatP&&(pontoSubTab==="folha"||pontoSubTab==="anual"))pontoSubTab="ponto";
+  if(isProfP)funcPontoSel=souLilian?"Lilian":"Amanda";
+  if(!pontoSubTab)pontoSubTab=souLilian?"salario":"ponto";
+  if(souLilian&&pontoSubTab==="ponto")pontoSubTab="salario";
+  if(!isCatP&&(pontoSubTab==="folha"||pontoSubTab==="anual"))pontoSubTab=souLilian?"salario":"ponto";
 
   var htmlTop="<div class='content'>";
   htmlTop+="<div style='display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap'>";
-  htmlTop+="<button class='tab"+(pontoSubTab==="ponto"?" active":"")+"' onclick='setPontoSubTab(\"ponto\")'><i class='ti ti-clock'></i> Ponto CLT</button>";
+  if(!souLilian)htmlTop+="<button class='tab"+(pontoSubTab==="ponto"?" active":"")+"' onclick='setPontoSubTab(\"ponto\")'><i class='ti ti-clock'></i> Ponto CLT</button>";
   htmlTop+="<button class='tab"+(pontoSubTab==="salario"?" active":"")+"' onclick='setPontoSubTab(\"salario\")'><i class='ti ti-cash'></i> Sal\u00e1rio</button>";
   if(isCatP){
     htmlTop+="<button class='tab"+(pontoSubTab==="folha"?" active":"")+"' onclick='setPontoSubTab(\"folha\")'><i class='ti ti-report-money'></i> Folha de Pagamento</button>";
@@ -41251,10 +41278,18 @@ function pontoHtml(){
   }
   htmlTop+="</div>";
 
-  if(pontoSubTab==="salario")return htmlTop+salarioHtml(isCatP)+"</div>";
+  if(pontoSubTab==="salario"){
+    var selHtmlSal="";
+    if(isCatP){
+      var optsFuncSal=FUNC_SALARIO.map(function(f){return "<option value='"+f+"'"+(funcPontoSel===f?" selected":"")+">"+f+"</option>";}).join("");
+      selHtmlSal="<div class='fi' style='margin-bottom:14px;max-width:260px'><label style='font-size:11px;font-weight:600;color:var(--mt);display:block;margin-bottom:4px'>FUNCION\u00c1RIA</label><select onchange='setFuncPonto(this.value)' style='font-size:13px;padding:7px 10px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx);width:100%'>"+optsFuncSal+"</select></div>";
+    }
+    return htmlTop+selHtmlSal+salarioHtml(isCatP)+"</div>";
+  }
   if(pontoSubTab==="folha"&&isCatP)return htmlTop+folhaHtml()+"</div>";
   if(pontoSubTab==="anual"&&isCatP)return htmlTop+visaoAnualHtml()+"</div>";
 
+  if(FUNC_PONTO.indexOf(funcPontoSel)===-1)funcPontoSel="Nicoli"; // Lilian n\u00e3o tem Ponto CLT
   var pfx=_pfxPonto();
   // Op\u00e7\u00f5es de m\u00eas: meses com registro + m\u00eas atual
   var meses=new Set([_pfxPonto()]);
@@ -41650,9 +41685,9 @@ function saveSalario(){dbSave("salario",_saveSalarioNow);}
 function _salRec(func,pfx){
   var r=(D.salario||[]).find(function(x){return x.func===func&&String(x.mes||"").substring(0,7)===pfx;});
   if(r)return r;
-  return func==="Nicoli"
-    ? {id:"",func:func,mes:pfx,holerite:"",valeDias:"",valeValorUnit:5}
-    : {id:"",func:func,mes:pfx,salarioFixo:5000,aulasExtrasQtd:"",aulasExtrasValorUnit:45,aulasExpQtd:"",aulasExpValorUnit:30,descDiasQtd:"",descDiasValorUnit:166.67,descExtraDesc:"",descExtraValor:""};
+  if(func==="Nicoli")return {id:"",func:func,mes:pfx,holerite:"",valeDias:"",valeValorUnit:5,comissaoMatriculaQtd:""};
+  if(func==="Lilian")return {id:"",func:func,mes:pfx,aulasExtrasQtd:"",aulasExtrasValorUnit:40,aulasExpQtd:"",aulasExpValorUnit:20};
+  return {id:"",func:func,mes:pfx,salarioFixo:5000,aulasExtrasQtd:"",aulasExtrasValorUnit:45,aulasExpQtd:"",aulasExpValorUnit:30,descDiasQtd:"",descDiasValorUnit:166.67,descExtraDesc:"",descExtraValor:""};
 }
 function _n(v){var n=parseFloat(String(v||"").replace(",","."));return isNaN(n)?0:n;}
 function salarioHtml(podeEditar){
@@ -41690,7 +41725,8 @@ function salarioHtml(podeEditar){
     var valeDias=_n(rec.valeDias),valeUnit=rec.valeValorUnit!==""&&rec.valeValorUnit!==undefined?_n(rec.valeValorUnit):5;
     var valeTotal=valeDias*valeUnit;
     var holerite=_n(rec.holerite);
-    var total=holerite+valeTotal;
+    var comQtd=_n(rec.comissaoMatriculaQtd),comTotal=_comissaoMatriculaValor(comQtd);
+    var total=holerite+valeTotal+comTotal;
     html+="<div class='card'>";
     html+="<div class='fi' style='margin-bottom:14px'><label>Data de pagamento</label><input type='date' id='sal-data-pgto' value='"+(rec.dataPagamento||"")+"' "+(podeEditar?"":"disabled")+" style='"+inp+"'></div>";
     html+="<div class='fi' style='margin-bottom:14px'><label>Sal\u00e1rio CLT (holerite)</label><input type='number' step='0.01' id='sal-holerite' value='"+(rec.holerite||"")+"' "+(podeEditar?"oninput='calcSalarioNicoli()'":"disabled")+" placeholder='R$ 0,00' style='"+inp+"'></div>";
@@ -41700,9 +41736,38 @@ function salarioHtml(podeEditar){
     html+="<div class='fi'><label>Valor por dia (R$)</label><input type='number' step='0.01' id='sal-vale-unit' value='"+valeUnit+"' "+(podeEditar?"oninput='calcSalarioNicoli()'":"disabled")+" style='"+inp+"'></div>";
     html+="<div class='fi'><label>Total Vale A</label><input type='text' id='sal-vale-total' value='"+BRL(valeTotal)+"' disabled style='"+inp+";font-weight:700'></div>";
     html+="</div>";
+    html+="<p style='font-size:12px;font-weight:700;color:var(--mt);margin:14px 0 8px'>COMISS\u00c3O DE MATR\u00cdCULA</p>";
+    html+="<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px'>";
+    html+="<div class='fi'><label>Matr\u00edculas fechadas no m\u00eas</label><input type='number' min='0' step='1' id='sal-com-qtd' value='"+(rec.comissaoMatriculaQtd||"")+"' "+(podeEditar?"oninput='calcSalarioNicoli()'":"disabled")+" style='"+inp+"'></div>";
+    html+="<div class='fi'><label>Total da comiss\u00e3o</label><input type='text' id='sal-com-total' value='"+BRL(comTotal)+"' disabled style='"+inp+";font-weight:700'></div>";
+    html+="</div>";
+    html+="<p style='font-size:11px;color:var(--mt);margin:0 0 14px'>Regra: 1 a 4 matr\u00edculas = R$10,00 por matr\u00edcula \u2014 5 ou mais = valor fixo de R$100,00.</p>";
     html+="<div style='margin-top:10px;padding:14px;background:linear-gradient(135deg,#f5f7fa 0%,#e8f4f8 100%);border:1px solid #d1e4ed;border-radius:10px;display:flex;justify-content:space-between;align-items:center'>";
     html+="<span style='font-weight:700;color:#1B5F7A'>TOTAL A RECEBER</span><span id='sal-total' style='font-size:22px;font-weight:800;color:#1B5F7A'>"+BRL(total)+"</span></div>";
     if(podeEditar)html+="<button class='btn bp' style='width:100%;justify-content:center;margin-top:14px' onclick='salvarSalarioNicoli()'><i class='ti ti-check'></i> Salvar sal\u00e1rio</button>";
+    html+="<div id='sal-alert'>"+_msgHtml+"</div>";
+    html+="</div>";
+  }else if(funcPontoSel==="Lilian"){
+    var lAeQ=_n(rec.aulasExtrasQtd),lAeU=rec.aulasExtrasValorUnit!==""&&rec.aulasExtrasValorUnit!==undefined?_n(rec.aulasExtrasValorUnit):40,lAeTotal=lAeQ*lAeU;
+    var lAxQ=_n(rec.aulasExpQtd),lAxU=rec.aulasExpValorUnit!==""&&rec.aulasExpValorUnit!==undefined?_n(rec.aulasExpValorUnit):20,lAxTotal=lAxQ*lAxU;
+    var totalLilian=lAeTotal+lAxTotal;
+    html+="<div class='card'>";
+    html+="<div class='fi' style='margin-bottom:14px'><label>Data de pagamento</label><input type='date' id='sal-data-pgto' value='"+(rec.dataPagamento||"")+"' "+(podeEditar?"":"disabled")+" style='"+inp+"'></div>";
+    html+="<p style='font-size:12px;font-weight:700;color:var(--mt);margin:0 0 8px'>AULAS FIXAS (Karat\u00ea)</p>";
+    html+="<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px'>";
+    html+="<div class='fi'><label>Quantas aulas</label><input type='number' min='0' step='1' id='sal-lae-qtd' value='"+(rec.aulasExtrasQtd||"")+"' "+(podeEditar?"oninput='calcSalarioLilian()'":"disabled")+" style='"+inp+"'></div>";
+    html+="<div class='fi'><label>Valor por aula (R$)</label><input type='number' step='0.01' id='sal-lae-unit' value='"+lAeU+"' "+(podeEditar?"oninput='calcSalarioLilian()'":"disabled")+" style='"+inp+"'></div>";
+    html+="<div class='fi'><label>Total</label><input type='text' id='sal-lae-total' value='"+BRL(lAeTotal)+"' disabled style='"+inp+";font-weight:700'></div>";
+    html+="</div>";
+    html+="<p style='font-size:12px;font-weight:700;color:var(--mt);margin:0 0 8px'>AULAS EXPERIMENTAIS</p>";
+    html+="<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px'>";
+    html+="<div class='fi'><label>Quantas aulas</label><input type='number' min='0' step='1' id='sal-lax-qtd' value='"+(rec.aulasExpQtd||"")+"' "+(podeEditar?"oninput='calcSalarioLilian()'":"disabled")+" style='"+inp+"'></div>";
+    html+="<div class='fi'><label>Valor por aula (R$)</label><input type='number' step='0.01' id='sal-lax-unit' value='"+lAxU+"' "+(podeEditar?"oninput='calcSalarioLilian()'":"disabled")+" style='"+inp+"'></div>";
+    html+="<div class='fi'><label>Total</label><input type='text' id='sal-lax-total' value='"+BRL(lAxTotal)+"' disabled style='"+inp+";font-weight:700'></div>";
+    html+="</div>";
+    html+="<div style='margin-top:4px;padding:14px;background:linear-gradient(135deg,#f5f7fa 0%,#e8f4f8 100%);border:1px solid #d1e4ed;border-radius:10px;display:flex;justify-content:space-between;align-items:center'>";
+    html+="<span style='font-weight:700;color:#1B5F7A'>TOTAL A RECEBER</span><span id='sal-total' style='font-size:22px;font-weight:800;color:#1B5F7A'>"+BRL(totalLilian)+"</span></div>";
+    if(podeEditar)html+="<button class='btn bp' style='width:100%;justify-content:center;margin-top:14px' onclick='salvarSalarioLilian()'><i class='ti ti-check'></i> Salvar sal\u00e1rio</button>";
     html+="<div id='sal-alert'>"+_msgHtml+"</div>";
     html+="</div>";
   }else{
@@ -41757,7 +41822,17 @@ function calcSalarioNicoli(){
   var u=_n(document.getElementById("sal-vale-unit").value);
   var vt=d*u;
   document.getElementById("sal-vale-total").value=BRL(vt);
-  document.getElementById("sal-total").textContent=BRL(h+vt);
+  var cq=_n(document.getElementById("sal-com-qtd").value);
+  var ct=_comissaoMatriculaValor(cq);
+  document.getElementById("sal-com-total").value=BRL(ct);
+  document.getElementById("sal-total").textContent=BRL(h+vt+ct);
+}
+function calcSalarioLilian(){
+  var aeQ=_n(document.getElementById("sal-lae-qtd").value),aeU=_n(document.getElementById("sal-lae-unit").value),aeT=aeQ*aeU;
+  var axQ=_n(document.getElementById("sal-lax-qtd").value),axU=_n(document.getElementById("sal-lax-unit").value),axT=axQ*axU;
+  document.getElementById("sal-lae-total").value=BRL(aeT);
+  document.getElementById("sal-lax-total").value=BRL(axT);
+  document.getElementById("sal-total").textContent=BRL(aeT+axT);
 }
 function calcSalarioAmanda(){
   var sf=_n(document.getElementById("sal-fixo").value);
@@ -41783,9 +41858,17 @@ function gerarContracheque(){
   if(func==="Nicoli"){
     var valeDias=_n(rec.valeDias),valeUnit=(rec.valeValorUnit!==""&&rec.valeValorUnit!==undefined)?_n(rec.valeValorUnit):5;
     var valeTotal=valeDias*valeUnit,holerite=_n(rec.holerite);
+    var comQtd=_n(rec.comissaoMatriculaQtd),comTotal=_comissaoMatriculaValor(comQtd);
     proventos.push(["Sal\u00e1rio CLT (holerite)",holerite]);
     if(valeDias>0)proventos.push(["Vale A ("+valeDias+" dia(s) x "+BRL(valeUnit)+")",valeTotal]);
-    totalProv=holerite+valeTotal;
+    if(comQtd>0)proventos.push(["Comiss\u00e3o de matr\u00edcula ("+comQtd+" matr\u00edcula(s))",comTotal]);
+    totalProv=holerite+valeTotal+comTotal;
+  }else if(func==="Lilian"){
+    var lAeQ=_n(rec.aulasExtrasQtd),lAeU=(rec.aulasExtrasValorUnit!==""&&rec.aulasExtrasValorUnit!==undefined)?_n(rec.aulasExtrasValorUnit):40,lAeTotal=lAeQ*lAeU;
+    var lAxQ=_n(rec.aulasExpQtd),lAxU=(rec.aulasExpValorUnit!==""&&rec.aulasExpValorUnit!==undefined)?_n(rec.aulasExpValorUnit):20,lAxTotal=lAxQ*lAxU;
+    if(lAeQ>0)proventos.push(["Aulas fixas ("+lAeQ+" x "+BRL(lAeU)+")",lAeTotal]);
+    if(lAxQ>0)proventos.push(["Aulas experimentais ("+lAxQ+" x "+BRL(lAxU)+")",lAxTotal]);
+    totalProv=lAeTotal+lAxTotal;
   }else{
     var sFixo=(rec.salarioFixo!==""&&rec.salarioFixo!==undefined)?_n(rec.salarioFixo):5000;
     var aeQ=_n(rec.aulasExtrasQtd),aeU=(rec.aulasExtrasValorUnit!==""&&rec.aulasExtrasValorUnit!==undefined)?_n(rec.aulasExtrasValorUnit):45,aeTotal=aeQ*aeU;
@@ -41849,7 +41932,8 @@ async function salvarSalarioNicoli(){
     dataPagamento:document.getElementById("sal-data-pgto").value,
     holerite:document.getElementById("sal-holerite").value,
     valeDias:document.getElementById("sal-vale-dias").value,
-    valeValorUnit:document.getElementById("sal-vale-unit").value
+    valeValorUnit:document.getElementById("sal-vale-unit").value,
+    comissaoMatriculaQtd:document.getElementById("sal-com-qtd").value
   });
   // salva na hora (sem debounce) pra sabermos o resultado real antes de avisar
   if(_dbt["salario"]){clearTimeout(_dbt["salario"]);delete _dbt["salario"];delete _dbt_fn["salario"];}
@@ -41887,11 +41971,34 @@ async function salvarSalarioAmanda(){
   refreshContent();
 }
 
+async function salvarSalarioLilian(){
+  if(!user||user.role!=="Gestora")return;
+  if(!_umaVez("salvarSalarioLilian"))return;
+  var pfx=_pfxPonto();
+  _upsertSalario("Lilian",pfx,{
+    dataPagamento:document.getElementById("sal-data-pgto").value,
+    aulasExtrasQtd:document.getElementById("sal-lae-qtd").value,
+    aulasExtrasValorUnit:document.getElementById("sal-lae-unit").value,
+    aulasExpQtd:document.getElementById("sal-lax-qtd").value,
+    aulasExpValorUnit:document.getElementById("sal-lax-unit").value
+  });
+  if(_dbt["salario"]){clearTimeout(_dbt["salario"]);delete _dbt["salario"];delete _dbt_fn["salario"];}
+  alert2("sal-alert","Salvando...",true);
+  var ok=await _saveSalarioNow();
+  _dbt_last["salario"]=Date.now();
+  _salAlertMsg=ok
+    ?{ok:true,msg:"Sal\u00e1rio de Lilian salvo com sucesso."}
+    :{ok:false,msg:"N\u00e3o foi poss\u00edvel salvar. Confira se a aba \"salario\" existe na planilha do Google Sheets (nome exatamente esse, min\u00fasculo) e clique em recarregar (\u21bb) antes de tentar de novo."};
+  refreshContent();
+}
+
 // ===== FOLHA DE PAGAMENTO CONSOLIDADA (s\u00f3 Gestora) =====
 function _folhaMes(pfx){
   var rN=_salRec("Nicoli",pfx);
   var valeDias=_n(rN.valeDias),valeUnit=(rN.valeValorUnit!==""&&rN.valeValorUnit!==undefined)?_n(rN.valeValorUnit):5;
-  var valeTotal=valeDias*valeUnit,holerite=_n(rN.holerite),totalNicoli=holerite+valeTotal;
+  var valeTotal=valeDias*valeUnit,holerite=_n(rN.holerite);
+  var comQtd=_n(rN.comissaoMatriculaQtd),comTotal=_comissaoMatriculaValor(comQtd);
+  var totalNicoli=holerite+valeTotal+comTotal;
 
   var rA=_salRec("Amanda",pfx);
   var sFixo=(rA.salarioFixo!==""&&rA.salarioFixo!==undefined)?_n(rA.salarioFixo):5000;
@@ -41901,10 +42008,16 @@ function _folhaMes(pfx){
   var deValor=_n(rA.descExtraValor),deDesc=rA.descExtraDesc||"";
   var totalAmanda=sFixo+aeTotal+axTotal-ddTotal-deValor;
 
+  var rL=_salRec("Lilian",pfx);
+  var lAeQ=_n(rL.aulasExtrasQtd),lAeU=(rL.aulasExtrasValorUnit!==""&&rL.aulasExtrasValorUnit!==undefined)?_n(rL.aulasExtrasValorUnit):40,lAeTotal=lAeQ*lAeU;
+  var lAxQ=_n(rL.aulasExpQtd),lAxU=(rL.aulasExpValorUnit!==""&&rL.aulasExpValorUnit!==undefined)?_n(rL.aulasExpValorUnit):20,lAxTotal=lAxQ*lAxU;
+  var totalLilian=lAeTotal+lAxTotal;
+
   return {
-    nicoli:{dataPagamento:rN.dataPagamento||"",holerite:holerite,valeDias:valeDias,valeUnit:valeUnit,valeTotal:valeTotal,total:totalNicoli},
+    nicoli:{dataPagamento:rN.dataPagamento||"",holerite:holerite,valeDias:valeDias,valeUnit:valeUnit,valeTotal:valeTotal,comQtd:comQtd,comTotal:comTotal,total:totalNicoli},
     amanda:{dataPagamento:rA.dataPagamento||"",sFixo:sFixo,aeQ:aeQ,aeU:aeU,aeTotal:aeTotal,axQ:axQ,axU:axU,axTotal:axTotal,ddQ:ddQ,ddU:ddU,ddTotal:ddTotal,deDesc:deDesc,deValor:deValor,total:totalAmanda},
-    totalGeral:totalNicoli+totalAmanda
+    lilian:{dataPagamento:rL.dataPagamento||"",aeQ:lAeQ,aeU:lAeU,aeTotal:lAeTotal,axQ:lAxQ,axU:lAxU,axTotal:lAxTotal,total:totalLilian},
+    totalGeral:totalNicoli+totalAmanda+totalLilian
   };
 }
 function folhaHtml(){
@@ -41934,6 +42047,7 @@ function folhaHtml(){
   html+="<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px'>";
   html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>NICOLI</div><div style='font-size:20px;font-weight:700;color:#1B5F7A'>"+BRL(F.nicoli.total)+"</div></div>";
   html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>AMANDA</div><div style='font-size:20px;font-weight:700;color:#1B5F7A'>"+BRL(F.amanda.total)+"</div></div>";
+  html+="<div style='text-align:center;padding:10px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>LILIAN</div><div style='font-size:20px;font-weight:700;color:#1B5F7A'>"+BRL(F.lilian.total)+"</div></div>";
   html+="<div style='text-align:center;padding:10px;border-left:2px solid #d1e4ed'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>TOTAL DA FOLHA</div><div style='font-size:24px;font-weight:800;color:#0b1e35'>"+BRL(F.totalGeral)+"</div></div>";
   html+="</div></div>";
 
@@ -41942,6 +42056,7 @@ function folhaHtml(){
   if(F.nicoli.dataPagamento)html+="<div class='sr'><span class='sl'>Data de pagamento</span><span class='sv'>"+fd(F.nicoli.dataPagamento)+"</span></div>";
   html+="<div class='sr'><span class='sl'>Sal\u00e1rio CLT (holerite)</span><span class='sv'>"+BRL(F.nicoli.holerite)+"</span></div>";
   html+="<div class='sr'><span class='sl'>Vale A ("+F.nicoli.valeDias+" dia(s) x "+BRL(F.nicoli.valeUnit)+")</span><span class='sv'>"+BRL(F.nicoli.valeTotal)+"</span></div>";
+  html+="<div class='sr'><span class='sl'>Comiss\u00e3o de matr\u00edcula ("+F.nicoli.comQtd+")</span><span class='sv'>"+BRL(F.nicoli.comTotal)+"</span></div>";
   html+="<div class='sr' style='border-top:1px solid var(--br);margin-top:6px;padding-top:8px'><span class='sl' style='font-weight:700'>Total</span><span class='sv' style='font-weight:700'>"+BRL(F.nicoli.total)+"</span></div>";
   html+="</div>";
   html+="<div class='card'><p class='ct'>Amanda \u2014 detalhamento</p>";
@@ -41952,6 +42067,12 @@ function folhaHtml(){
   html+="<div class='sr'><span class='sl' style='color:#A32D2D'>Desconto de dias ("+F.amanda.ddQ+" x "+BRL(F.amanda.ddU)+")</span><span class='sv' style='color:#c62828'>-"+BRL(F.amanda.ddTotal)+"</span></div>";
   html+="<div class='sr'><span class='sl' style='color:#A32D2D'>Descontos extras"+(F.amanda.deDesc?" ("+prEsc(F.amanda.deDesc)+")":"")+"</span><span class='sv' style='color:#c62828'>-"+BRL(F.amanda.deValor)+"</span></div>";
   html+="<div class='sr' style='border-top:1px solid var(--br);margin-top:6px;padding-top:8px'><span class='sl' style='font-weight:700'>Total</span><span class='sv' style='font-weight:700'>"+BRL(F.amanda.total)+"</span></div>";
+  html+="</div>";
+  html+="<div class='card'><p class='ct'>Lilian \u2014 detalhamento</p>";
+  if(F.lilian.dataPagamento)html+="<div class='sr'><span class='sl'>Data de pagamento</span><span class='sv'>"+fd(F.lilian.dataPagamento)+"</span></div>";
+  html+="<div class='sr'><span class='sl'>Aulas fixas ("+F.lilian.aeQ+" x "+BRL(F.lilian.aeU)+")</span><span class='sv'>"+BRL(F.lilian.aeTotal)+"</span></div>";
+  html+="<div class='sr'><span class='sl'>Aulas experimentais ("+F.lilian.axQ+" x "+BRL(F.lilian.axU)+")</span><span class='sv'>"+BRL(F.lilian.axTotal)+"</span></div>";
+  html+="<div class='sr' style='border-top:1px solid var(--br);margin-top:6px;padding-top:8px'><span class='sl' style='font-weight:700'>Total</span><span class='sv' style='font-weight:700'>"+BRL(F.lilian.total)+"</span></div>";
   html+="</div>";
   html+="</div>";
   return html;
@@ -41968,6 +42089,7 @@ function exportPDFFolha(){
   h+="<table class='pdf-tbl'><tbody>";
   h+="<tr><td>Nicoli</td><td style='font-weight:700'>"+BRL(F.nicoli.total)+"</td></tr>";
   h+="<tr><td>Amanda</td><td style='font-weight:700'>"+BRL(F.amanda.total)+"</td></tr>";
+  h+="<tr><td>Lilian</td><td style='font-weight:700'>"+BRL(F.lilian.total)+"</td></tr>";
   h+="<tr><td style='font-weight:800'>Total da folha</td><td style='font-weight:800'>"+BRL(F.totalGeral)+"</td></tr>";
   h+="</tbody></table>";
   h+="<div class='pdf-section-title'>Nicoli \u2014 detalhamento</div>";
@@ -41975,6 +42097,7 @@ function exportPDFFolha(){
   if(F.nicoli.dataPagamento)h+="<tr><td>Data de pagamento</td><td style='font-weight:700'>"+fd(F.nicoli.dataPagamento)+"</td></tr>";
   h+="<tr><td>Sal\u00e1rio CLT (holerite)</td><td style='font-weight:700'>"+BRL(F.nicoli.holerite)+"</td></tr>";
   h+="<tr><td>Vale A ("+F.nicoli.valeDias+" dia(s) x "+BRL(F.nicoli.valeUnit)+")</td><td style='font-weight:700'>"+BRL(F.nicoli.valeTotal)+"</td></tr>";
+  h+="<tr><td>Comiss\u00e3o de matr\u00edcula ("+F.nicoli.comQtd+")</td><td style='font-weight:700'>"+BRL(F.nicoli.comTotal)+"</td></tr>";
   h+="<tr><td style='font-weight:800'>Total</td><td style='font-weight:800'>"+BRL(F.nicoli.total)+"</td></tr>";
   h+="</tbody></table>";
   h+="<div class='pdf-section-title'>Amanda \u2014 detalhamento</div>";
@@ -41986,6 +42109,13 @@ function exportPDFFolha(){
   h+="<tr><td>Desconto de dias ("+F.amanda.ddQ+" x "+BRL(F.amanda.ddU)+")</td><td style='font-weight:700;color:#c62828'>-"+BRL(F.amanda.ddTotal)+"</td></tr>";
   h+="<tr><td>Descontos extras"+(F.amanda.deDesc?" ("+prEsc(F.amanda.deDesc)+")":"")+"</td><td style='font-weight:700;color:#c62828'>-"+BRL(F.amanda.deValor)+"</td></tr>";
   h+="<tr><td style='font-weight:800'>Total</td><td style='font-weight:800'>"+BRL(F.amanda.total)+"</td></tr>";
+  h+="</tbody></table>";
+  h+="<div class='pdf-section-title'>Lilian \u2014 detalhamento</div>";
+  h+="<table class='pdf-tbl'><tbody>";
+  if(F.lilian.dataPagamento)h+="<tr><td>Data de pagamento</td><td style='font-weight:700'>"+fd(F.lilian.dataPagamento)+"</td></tr>";
+  h+="<tr><td>Aulas fixas ("+F.lilian.aeQ+" x "+BRL(F.lilian.aeU)+")</td><td style='font-weight:700'>"+BRL(F.lilian.aeTotal)+"</td></tr>";
+  h+="<tr><td>Aulas experimentais ("+F.lilian.axQ+" x "+BRL(F.lilian.axU)+")</td><td style='font-weight:700'>"+BRL(F.lilian.axTotal)+"</td></tr>";
+  h+="<tr><td style='font-weight:800'>Total</td><td style='font-weight:800'>"+BRL(F.lilian.total)+"</td></tr>";
   h+="</tbody></table>";
   h+="</div>";
   h+=pdfFooterPremium();
