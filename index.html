@@ -34088,7 +34088,8 @@ async function syncAll(){
   "ponto",
   "salario",
   "logs",
-  "servicosExtras"
+  "servicosExtras",
+  "aulasLilian"
 ];
 
 var abas=[
@@ -34110,7 +34111,8 @@ var abas=[
   "ponto",
   "salario",
   "logs",
-  "servicosextras"
+  "servicosextras",
+  "aulaslilian"
 ];
   // ⚡ OTIMIZAÇÃO: Carregar TODAS as abas em paralelo com Promise.all() ao invés de sequencial
   var promises=abas.map(function(aba){return loadAba(aba);});
@@ -41266,18 +41268,20 @@ function pontoHtml(){
   if(isProfP)funcPontoSel=souLilian?"Lilian":"Amanda";
   if(!pontoSubTab)pontoSubTab=souLilian?"salario":"ponto";
   if(souLilian&&pontoSubTab==="ponto")pontoSubTab="salario";
-  if(!isCatP&&(pontoSubTab==="folha"||pontoSubTab==="anual"))pontoSubTab=souLilian?"salario":"ponto";
+  if(!isCatP&&(pontoSubTab==="folha"||pontoSubTab==="anual"||pontoSubTab==="aulaslilian"))pontoSubTab=souLilian?"salario":"ponto";
 
   var htmlTop="<div class='content'>";
   htmlTop+="<div style='display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap'>";
   if(!souLilian)htmlTop+="<button class='tab"+(pontoSubTab==="ponto"?" active":"")+"' onclick='setPontoSubTab(\"ponto\")'><i class='ti ti-clock'></i> Ponto CLT</button>";
   htmlTop+="<button class='tab"+(pontoSubTab==="salario"?" active":"")+"' onclick='setPontoSubTab(\"salario\")'><i class='ti ti-cash'></i> Sal\u00e1rio</button>";
   if(isCatP){
+    htmlTop+="<button class='tab"+(pontoSubTab==="aulaslilian"?" active":"")+"' onclick='setPontoSubTab(\"aulaslilian\")'><i class='ti ti-calendar-event'></i> Aulas Lilian</button>";
     htmlTop+="<button class='tab"+(pontoSubTab==="folha"?" active":"")+"' onclick='setPontoSubTab(\"folha\")'><i class='ti ti-report-money'></i> Folha de Pagamento</button>";
     htmlTop+="<button class='tab"+(pontoSubTab==="anual"?" active":"")+"' onclick='setPontoSubTab(\"anual\")'><i class='ti ti-chart-bar'></i> Vis\u00e3o Anual</button>";
   }
   htmlTop+="</div>";
 
+  if(pontoSubTab==="aulaslilian"&&isCatP)return htmlTop+aulasLilianHtml()+"</div>";
   if(pontoSubTab==="salario"){
     var selHtmlSal="";
     if(isCatP){
@@ -41676,6 +41680,196 @@ function excluirPonto(id){
   savePonto();
   refreshContent();
 }
+// ===== AULAS DA LILIAN (registro dia a dia \u2014 quem, tipo, e desmarca\u00e7\u00f5es) =====
+var AULASLILIAN_H=["id","data","aluno","tipo","status","obs"];
+var AL_TIPO_LBL={fixa:"Aula fixa",experimental:"Experimental"};
+var AL_STATUS_LBL={realizada:"Realizada",prof_desmarcou:"Professora desmarcou",aluno_desmarcou:"Aluno desmarcou",aluno_faltou:"Aluno faltou"};
+var AL_STATUS_COR={realizada:"#4CAF50",prof_desmarcou:"#D32F2F",aluno_desmarcou:"#F57C00",aluno_faltou:"#8b95a3"};
+var mesAtualAL=null;
+function setMesAL(v){mesAtualAL=v;refreshContent();}
+function _alPfx(){
+  if(!mesAtualAL){var d=new Date();mesAtualAL=String(d.getMonth()+1).padStart(2,"0")+"/"+d.getFullYear();}
+  var mm=mesAtualAL.split("/");return mm[1]+"-"+mm[0];
+}
+async function _saveAulasLilianNow(){
+  var rows=(D.aulasLilian||[]).map(function(a){return AULASLILIAN_H.map(function(k){var v=a[k];return (v===undefined||v===null)?"":String(v);});});
+  return await rewriteAba("aulaslilian",AULASLILIAN_H,rows);
+}
+function saveAulasLilian(){dbSave("aulaslilian",_saveAulasLilianNow);}
+function alResumoMes(pfx){
+  var lista=(D.aulasLilian||[]).filter(function(a){return a.data&&a.data.startsWith(pfx);});
+  var r={fixaReal:0,expReal:0,profDesm:0,alunoDesm:0,alunoFaltou:0};
+  lista.forEach(function(a){
+    if(a.status==="realizada"){if(a.tipo==="fixa")r.fixaReal++;else r.expReal++;}
+    else if(a.status==="prof_desmarcou")r.profDesm++;
+    else if(a.status==="aluno_desmarcou")r.alunoDesm++;
+    else if(a.status==="aluno_faltou")r.alunoFaltou++;
+  });
+  return r;
+}
+function aulasLilianHtml(){
+  if(!user||user.role!=="Gestora")return "<div class='card'><p class='empty'><i class='ti ti-lock'></i> Acesso restrito.</p></div>";
+  var pfx=_alPfx();
+  var meses=new Set([pfx]);
+  var hoje=new Date();meses.add(hoje.getFullYear()+"-"+String(hoje.getMonth()+1).padStart(2,"0"));
+  (D.aulasLilian||[]).forEach(function(a){if(a.data)meses.add(String(a.data).substring(0,7));});
+  var mlbl=["","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  var optsMes=Array.from(meses).sort().reverse().map(function(m){
+    var mm=m.split("-"),val=String(+mm[1]).padStart(2,"0")+"/"+mm[0];
+    return "<option value='"+val+"'"+(mesAtualAL===val?" selected":"")+">"+mlbl[+mm[1]]+"/"+mm[0]+"</option>";
+  }).join("");
+  var R=alResumoMes(pfx);
+  var inp="font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)";
+
+  var html="";
+  html+="<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px'>";
+  html+="<div class='ct' style='margin-bottom:0'><i class='ti ti-calendar-event'></i> Aulas da Lilian \u2014 registro dia a dia</div>";
+  html+="<div style='display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap'>";
+  html+="<div class='fi' style='margin-bottom:0'><label style='font-size:11px;font-weight:600;color:var(--mt);display:block;margin-bottom:4px'>M\u00caS</label><select onchange='setMesAL(this.value)' style='font-size:13px;padding:7px 10px;border:1px solid var(--br);border-radius:8px;background:var(--b2);color:var(--tx)'>"+optsMes+"</select></div>";
+  html+="<button class='btn' style='background:#0b1e35;color:#fff;border:none;display:flex;align-items:center;gap:6px;font-size:13px' onclick='gerarPDFAulasLilian()'><i class='ti ti-file-type-pdf'></i> Relat\u00f3rio do M\u00eas (PDF)</button>";
+  html+="</div></div>";
+
+  html+="<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px'>";
+  html+="<div class='card' style='text-align:center;padding:14px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>FIXAS REALIZADAS</div><div style='font-size:24px;font-weight:800;color:#4CAF50'>"+R.fixaReal+"</div></div>";
+  html+="<div class='card' style='text-align:center;padding:14px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>EXPERIMENTAIS REALIZADAS</div><div style='font-size:24px;font-weight:800;color:#4CAF50'>"+R.expReal+"</div></div>";
+  html+="<div class='card' style='text-align:center;padding:14px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>PROFESSORA DESMARCOU</div><div style='font-size:24px;font-weight:800;color:#D32F2F'>"+R.profDesm+"</div></div>";
+  html+="<div class='card' style='text-align:center;padding:14px'><div style='font-size:11px;color:var(--mt);font-weight:600;margin-bottom:6px'>ALUNO DESMARCOU/FALTOU</div><div style='font-size:24px;font-weight:800;color:#F57C00'>"+(R.alunoDesm+R.alunoFaltou)+"</div></div>";
+  html+="</div>";
+
+  html+="<div class='card' style='margin-bottom:16px'>";
+  html+="<p class='ct'><i class='ti ti-plus'></i> Registrar aula</p>";
+  html+="<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px'>";
+  html+="<div class='fi'><label>Data</label><input type='date' id='al-data' value='"+fdISO(new Date())+"' style='"+inp+"'></div>";
+  html+="<div class='fi'><label>Aluno</label><input type='text' id='al-aluno' placeholder='Nome do aluno' style='"+inp+"'></div>";
+  html+="</div>";
+  html+="<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px'>";
+  html+="<div class='fi'><label>Tipo</label><select id='al-tipo' style='"+inp+"'><option value='fixa'>Aula fixa</option><option value='experimental'>Experimental</option></select></div>";
+  html+="<div class='fi'><label>Status</label><select id='al-status' style='"+inp+"'><option value='realizada'>Realizada</option><option value='prof_desmarcou'>Professora desmarcou</option><option value='aluno_desmarcou'>Aluno desmarcou</option><option value='aluno_faltou'>Aluno faltou</option></select></div>";
+  html+="</div>";
+  html+="<div class='fi' style='margin-bottom:10px'><label>Observa\u00e7\u00e3o (opcional)</label><input type='text' id='al-obs' placeholder='Ex: remarcada pra sexta...' style='"+inp+"'></div>";
+  html+="<button class='btn bp' style='width:100%;justify-content:center' onclick='salvarAulaLilian()'><i class='ti ti-check'></i> Registrar</button>";
+  html+="<div id='al-alert'></div>";
+  html+="</div>";
+
+  var lista=(D.aulasLilian||[]).filter(function(a){return a.data&&a.data.startsWith(pfx);}).sort(function(a,b){return a.data<b.data?1:-1;});
+  html+="<div class='card'><p class='ct'><i class='ti ti-list-details'></i> Registros de "+mesAtualAL+" ("+lista.length+")</p>";
+  if(lista.length===0){
+    html+="<p class='empty'>Nenhum registro neste m\u00eas.</p>";
+  }else{
+    html+="<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;font-size:12px'>";
+    html+="<tr style='background:var(--b2)'><th style='padding:8px;text-align:left'>Data</th><th style='padding:8px;text-align:left'>Aluno</th><th style='padding:8px;text-align:left'>Tipo</th><th style='padding:8px;text-align:left'>Status</th><th style='padding:8px;text-align:left'>Obs</th><th style='padding:8px'></th></tr>";
+    lista.forEach(function(a){
+      html+="<tr style='border-bottom:1px solid var(--br)'>";
+      html+="<td style='padding:8px;white-space:nowrap;font-weight:600'>"+fd(a.data)+"</td>";
+      html+="<td style='padding:8px'>"+(a.aluno||"\u2014")+"</td>";
+      html+="<td style='padding:8px'>"+(AL_TIPO_LBL[a.tipo]||a.tipo)+"</td>";
+      html+="<td style='padding:8px'><span style='font-size:10px;font-weight:700;color:#fff;background:"+(AL_STATUS_COR[a.status]||"#8b95a3")+";border-radius:12px;padding:2px 8px;white-space:nowrap'>"+(AL_STATUS_LBL[a.status]||a.status)+"</span></td>";
+      html+="<td style='padding:8px;color:var(--mt)'>"+(a.obs||"")+"</td>";
+      html+="<td style='padding:8px;white-space:nowrap'><button class='btn bsm' onclick='editarAulaLilian(\""+a.id+"\")' title='Editar'><i class='ti ti-pencil'></i></button> <button class='btn bd bsm' onclick='excluirAulaLilian(\""+a.id+"\")' title='Excluir'><i class='ti ti-trash'></i></button></td>";
+      html+="</tr>";
+    });
+    html+="</table></div>";
+  }
+  html+="</div>";
+  return html;
+}
+function salvarAulaLilian(){
+  if(!user||user.role!=="Gestora")return;
+  if(!_umaVez("salvarAulaLilian"))return;
+  var data=document.getElementById("al-data").value;
+  if(!data){alert2("al-alert","Informe a data.",false);return;}
+  var obj={id:_novoId("al"),data:data,aluno:(document.getElementById("al-aluno").value||"").trim(),tipo:document.getElementById("al-tipo").value,status:document.getElementById("al-status").value,obs:(document.getElementById("al-obs").value||"").trim()};
+  if(!D.aulasLilian)D.aulasLilian=[];
+  D.aulasLilian.push(obj);
+  saveAulasLilian();
+  alert2("al-alert","Registrado!",true);
+  setTimeout(function(){refreshContent();},600);
+}
+function editarAulaLilian(id){
+  var a=(D.aulasLilian||[]).find(function(x){return x.id===id;});
+  if(!a)return;
+  var inp="font-size:13px;padding:8px;border:1px solid var(--br);border-radius:8px;width:100%;background:var(--b2);color:var(--tx)";
+  var html="<div class='modal-overlay' onclick=\"if(event.target===this)closeModal()\">"
+    +"<div class='modal'>"
+    +"<p class='modal-title'><i class='ti ti-edit' style='color:var(--brand2)'></i> Editar aula da Lilian</p>"
+    +"<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px'>"
+    +"<div class='fi'><label>Data</label><input type='date' id='eal-data' value='"+a.data+"' style='"+inp+"'></div>"
+    +"<div class='fi'><label>Aluno</label><input type='text' id='eal-aluno' value='"+(a.aluno||"").replace(/'/g,"&#39;")+"' style='"+inp+"'></div>"
+    +"</div>"
+    +"<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px'>"
+    +"<div class='fi'><label>Tipo</label><select id='eal-tipo' style='"+inp+"'><option value='fixa'"+(a.tipo==="fixa"?" selected":"")+">Aula fixa</option><option value='experimental'"+(a.tipo==="experimental"?" selected":"")+">Experimental</option></select></div>"
+    +"<div class='fi'><label>Status</label><select id='eal-status' style='"+inp+"'>"
+    +"<option value='realizada'"+(a.status==="realizada"?" selected":"")+">Realizada</option>"
+    +"<option value='prof_desmarcou'"+(a.status==="prof_desmarcou"?" selected":"")+">Professora desmarcou</option>"
+    +"<option value='aluno_desmarcou'"+(a.status==="aluno_desmarcou"?" selected":"")+">Aluno desmarcou</option>"
+    +"<option value='aluno_faltou'"+(a.status==="aluno_faltou"?" selected":"")+">Aluno faltou</option>"
+    +"</select></div></div>"
+    +"<div class='fi' style='margin-bottom:14px'><label>Observa\u00e7\u00e3o</label><input type='text' id='eal-obs' value='"+(a.obs||"").replace(/'/g,"&#39;")+"' style='"+inp+"'></div>"
+    +"<div style='display:flex;gap:8px'>"
+    +"<button class='btn bp' style='flex:1;justify-content:center' onclick=\"salvarEdicaoAulaLilian('"+id+"')\"><i class='ti ti-check'></i> Salvar</button>"
+    +"<button class='btn' onclick='closeModal()'>Cancelar</button></div>"
+    +"</div></div>";
+  document.getElementById("mc").innerHTML=html;
+}
+function salvarEdicaoAulaLilian(id){
+  var a=(D.aulasLilian||[]).find(function(x){return x.id===id;});
+  if(!a)return;
+  a.data=document.getElementById("eal-data").value;
+  a.aluno=(document.getElementById("eal-aluno").value||"").trim();
+  a.tipo=document.getElementById("eal-tipo").value;
+  a.status=document.getElementById("eal-status").value;
+  a.obs=(document.getElementById("eal-obs").value||"").trim();
+  saveAulasLilian();
+  closeModal();refreshContent();
+}
+function excluirAulaLilian(id){
+  if(!user||user.role!=="Gestora")return;
+  var a=(D.aulasLilian||[]).find(function(x){return x.id===id;});
+  if(!a)return;
+  if(!confirm("Excluir o registro de "+fd(a.data)+" ("+(a.aluno||"sem aluno")+")?"))return;
+  D.aulasLilian=(D.aulasLilian||[]).filter(function(x){return x.id!==id;});
+  saveAulasLilian();
+  refreshContent();
+}
+function gerarPDFAulasLilian(){
+  var pfx=_alPfx();
+  var mlbl=["","Janeiro","Fevereiro","Mar\u00e7o","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  var mm=pfx.split("-"),labelMes=mlbl[+mm[1]]+"/"+mm[0];
+  var R=alResumoMes(pfx);
+  var lista=(D.aulasLilian||[]).filter(function(a){return a.data&&a.data.startsWith(pfx);}).sort(function(a,b){return a.data<b.data?1:-1;});
+  var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><link href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap' rel='stylesheet'>"+pdfCssPremium()+"</head><body><div class='sheet'>";
+  h+=pdfHeaderPremium("Aulas de Karat\u00ea","Aulas da Lilian \u2014 Registro do M\u00eas","M\u00eas de refer\u00eancia: "+labelMes,lista.length+" registro(s) no m\u00eas");
+  h+="<div class='pdf-body'>";
+
+  h+="<div class='pdf-section-title'>Resumo do m\u00eas</div>";
+  h+="<table class='pdf-tbl'><tbody>";
+  h+="<tr><td>Aulas fixas realizadas</td><td style='font-weight:700'>"+R.fixaReal+"</td></tr>";
+  h+="<tr><td>Aulas experimentais realizadas</td><td style='font-weight:700'>"+R.expReal+"</td></tr>";
+  h+="<tr><td style='color:#c62828'>Professora desmarcou</td><td style='font-weight:700;color:#c62828'>"+R.profDesm+"</td></tr>";
+  h+="<tr><td style='color:#c67c00'>Aluno desmarcou</td><td style='font-weight:700;color:#c67c00'>"+R.alunoDesm+"</td></tr>";
+  h+="<tr><td style='color:#c67c00'>Aluno faltou</td><td style='font-weight:700;color:#c67c00'>"+R.alunoFaltou+"</td></tr>";
+  h+="</tbody></table>";
+
+  h+="<div class='pdf-section-title'>Registros di\u00e1rios <span class='pdf-count'>"+lista.length+"</span></div>";
+  if(lista.length===0){
+    h+="<div class='pdf-empty'>Nenhum registro neste m\u00eas.</div>";
+  }else{
+    h+="<table class='pdf-tbl'><tbody>";
+    h+="<tr style='background:#f7f9fb'><td style='font-weight:800;color:#0b1e35;width:16%'>Data</td><td style='font-weight:800;color:#0b1e35;width:24%'>Aluno</td><td style='font-weight:800;color:#0b1e35;width:16%'>Tipo</td><td style='font-weight:800;color:#0b1e35;width:20%'>Status</td><td style='font-weight:800;color:#0b1e35'>Observa\u00e7\u00e3o</td></tr>";
+    lista.forEach(function(a){
+      h+="<tr><td style='font-weight:600'>"+fd(a.data)+"</td><td>"+(a.aluno?prEsc(a.aluno):"\u2014")+"</td><td>"+(AL_TIPO_LBL[a.tipo]||a.tipo)+"</td><td style='font-weight:700'>"+(AL_STATUS_LBL[a.status]||a.status)+"</td><td>"+(a.obs?prEsc(a.obs):"\u2014")+"</td></tr>";
+    });
+    h+="</tbody></table>";
+  }
+
+  h+="</div>";
+  h+=pdfFooterPremium();
+  h+="</div></body></html>";
+  var w=window.open("","_blank","width=900,height=700");if(!w){alert("Bloqueador de pop-up ativado.");return;}
+  w.document.write(h);w.document.close();w.focus();
+  setTimeout(function(){w.print();},1200);
+}
+
 // ===== SAL\u00c1RIO (Nicoli e Amanda) =====
 async function _saveSalarioNow(){
   var rows=(D.salario||[]).map(function(p){return SAL_H.map(function(k){var v=p[k];return (v===undefined||v===null)?"":String(v);});});
@@ -41751,7 +41945,14 @@ function salarioHtml(podeEditar){
     var lAeQ=_n(rec.aulasExtrasQtd),lAeU=rec.aulasExtrasValorUnit!==""&&rec.aulasExtrasValorUnit!==undefined?_n(rec.aulasExtrasValorUnit):40,lAeTotal=lAeQ*lAeU;
     var lAxQ=_n(rec.aulasExpQtd),lAxU=rec.aulasExpValorUnit!==""&&rec.aulasExpValorUnit!==undefined?_n(rec.aulasExpValorUnit):20,lAxTotal=lAxQ*lAxU;
     var totalLilian=lAeTotal+lAxTotal;
+    var _rLog=alResumoMes(pfx);
     html+="<div class='card'>";
+    if(podeEditar){
+      html+="<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;padding:10px 14px;background:var(--b2);border-radius:8px'>";
+      html+="<span style='font-size:12px;color:var(--mt)'><i class='ti ti-calendar-event'></i> No log \"Aulas Lilian\" de "+labelMes+": <b>"+_rLog.fixaReal+"</b> fixa(s) e <b>"+_rLog.expReal+"</b> experimental(is) realizada(s)"+((_rLog.profDesm+_rLog.alunoDesm+_rLog.alunoFaltou)>0?(" \u2014 "+(_rLog.profDesm+_rLog.alunoDesm+_rLog.alunoFaltou)+" desmarcada(s)/falta(s)"):"")+".</span>";
+      html+="<button type='button' class='btn bsm' onclick='puxarAulasLilianDoLog()'><i class='ti ti-refresh'></i> Puxar do log</button>";
+      html+="</div>";
+    }
     html+="<div class='fi' style='margin-bottom:14px'><label>Data de pagamento</label><input type='date' id='sal-data-pgto' value='"+(rec.dataPagamento||"")+"' "+(podeEditar?"":"disabled")+" style='"+inp+"'></div>";
     html+="<p style='font-size:12px;font-weight:700;color:var(--mt);margin:0 0 8px'>AULAS FIXAS (Karat\u00ea)</p>";
     html+="<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px'>";
@@ -41826,6 +42027,13 @@ function calcSalarioNicoli(){
   var ct=_comissaoMatriculaValor(cq);
   document.getElementById("sal-com-total").value=BRL(ct);
   document.getElementById("sal-total").textContent=BRL(h+vt+ct);
+}
+function puxarAulasLilianDoLog(){
+  var pfx=_pfxPonto();
+  var R=alResumoMes(pfx);
+  document.getElementById("sal-lae-qtd").value=R.fixaReal;
+  document.getElementById("sal-lax-qtd").value=R.expReal;
+  calcSalarioLilian();
 }
 function calcSalarioLilian(){
   var aeQ=_n(document.getElementById("sal-lae-qtd").value),aeU=_n(document.getElementById("sal-lae-unit").value),aeT=aeQ*aeU;
